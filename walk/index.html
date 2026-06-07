@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Block indexing / crawling (search, AI, archival bots) -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, max-snippet:0, max-image-preview:none, max-video-preview:0">
+  <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="slurp" content="noindex, nofollow">
+  <meta name="duckduckbot" content="noindex, nofollow">
+  <meta name="applebot" content="noindex, nofollow">
+  <meta name="GPTBot" content="noindex, nofollow">
+  <meta name="ChatGPT-User" content="noindex, nofollow">
+  <meta name="Google-Extended" content="noindex, nofollow">
+  <meta name="Anthropic-AI" content="noindex, nofollow">
+  <meta name="ClaudeBot" content="noindex, nofollow">
+  <meta name="Claude-Web" content="noindex, nofollow">
+  <meta name="PerplexityBot" content="noindex, nofollow">
+  <meta name="Bytespider" content="noindex, nofollow">
+  <meta name="CCBot" content="noindex, nofollow">
+  <meta name="cohere-ai" content="noindex, nofollow">
+  <meta name="FacebookBot" content="noindex, nofollow">
+  <meta name="meta-externalagent" content="noindex, nofollow">
+  <meta name="Amazonbot" content="noindex, nofollow">
+  <meta name="Applebot-Extended" content="noindex, nofollow">
+  <meta name="Diffbot" content="noindex, nofollow">
+  <meta name="Omgilibot" content="noindex, nofollow">
+  <meta name="YouBot" content="noindex, nofollow">
+  <title>Scenarios — Hoibò Dev Console</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
+  <meta name="theme-color" content="#f59207" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/hoibo-scenarios/static/css/console.css" />
+  <style>
+    header nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    header nav a img {
+      width: 14px;
+      height: 14px;
+      opacity: 0.9;
+    }
+
+    #preset-seed {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      min-height: 0;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(360px, 45vh);
+      }
+    }
+
+    .panel {
+      padding: 1rem;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.45;
+      margin-top: 0.5rem;
+    }
+
+    .status {
+      font-size: 0.8rem;
+      margin-top: 0.75rem;
+      padding: 0.6rem;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+
+    .status.ok {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .status.err {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #1a1a1f;
+      cursor: crosshair;
+      z-index: 0;
+    }
+
+    .shop-list {
+      margin-top: 1rem;
+    }
+
+    .shop-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.65rem;
+      margin-bottom: 0.5rem;
+      background: var(--surface);
+    }
+
+    .shop-card h3 {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .shop-card p {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+
+    .shop-card button {
+      margin-top: 0.45rem;
+      font-size: 0.8rem;
+      padding: 0.4rem;
+    }
+
+    .coords-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .device-pick {
+      margin-top: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.5rem 0.65rem;
+      background: var(--surface);
+      max-height: 8rem;
+      overflow-y: auto;
+    }
+
+    .device-pick label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      margin-bottom: 0.35rem;
+      cursor: pointer;
+    }
+
+    .run-history {
+      margin-top: 1rem;
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+    }
+
+    .run-history table {
+      width: 100%;
+      font-size: 0.72rem;
+      border-collapse: collapse;
+    }
+
+    .run-history th,
+    .run-history td {
+      text-align: left;
+      padding: 0.25rem 0.15rem;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .run-history .tag {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .run-history .tag.pass { border-color: var(--success); color: var(--success); }
+    .run-history .tag.fail { border-color: var(--danger); color: var(--danger); }
+    .run-history .tag.progress { border-color: var(--accent); color: var(--accent); }
+
+    .env-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+      padding: 0.5rem 1rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+    }
+    .env-strip .env-pill {
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+    }
+    .env-pill.stage { background: #1a3a2a; color: #6ee7a0; }
+    .env-pill.prod { background: #3a1a1a; color: #f0a0a0; }
+    .env-pill.local { background: #1a2a3a; color: #93c5fd; }
+    .env-target-btns button {
+      font-size: 0.72rem;
+      padding: 0.2rem 0.5rem;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .env-target-btns button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+
+
+    .playbook {
+      margin-top: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.65rem;
+      background: var(--surface);
+      font-size: 0.78rem;
+    }
+
+    .playbook h3 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .playbook ol {
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+
+    .playbook li {
+      margin-bottom: 0.45rem;
+      line-height: 1.4;
+    }
+
+    .playbook .who {
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+    }
+
+    .playbook .step-mark {
+      font-weight: 700;
+      margin-right: 0.2rem;
+    }
+
+    .playbook .step-pass {
+      color: var(--success);
+    }
+
+    .playbook .step-fail {
+      color: var(--danger);
+    }
+
+    .playbook .step-pending {
+      color: var(--muted);
+    }
+
+    .playbook .step-manual {
+      color: var(--muted);
+    }
+
+    .playbook .step-detail {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.12rem;
+    }
+
+    .playbook .expect {
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .playbook .expect ul {
+      margin: 0.35rem 0 0;
+      padding-left: 1.1rem;
+    }
+
+    .center-pin {
+      background: transparent;
+      border: none;
+    }
+
+    .center-pin-dot {
+      width: 22px;
+      height: 22px;
+      background: var(--accent);
+      border: 3px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(245, 146, 7, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
+    .map-hint {
+      position: absolute;
+      z-index: 1000;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(26, 26, 31, 0.92);
+      color: var(--muted);
+      font-size: 0.72rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      pointer-events: none;
+    }
+
+    .map-wrap {
+      position: relative;
+      min-height: 360px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .log-check {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      border: 2px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 0.75rem;
+      background: #f5920718;
+    }
+
+    .workflow-note {
+      margin-bottom: 0.75rem;
+      padding: 0.65rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .workflow-note strong {
+      color: var(--accent);
+    }
+
+    .log-check h3 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .log-check textarea {
+      min-height: 110px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      margin-top: 0.35rem;
+    }
+
+    .log-check .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .log-check .btn-row button {
+      margin-top: 0;
+      font-size: 0.78rem;
+      padding: 0.45rem;
+    }
+
+    .check-list {
+      margin-top: 0.6rem;
+      font-size: 0.75rem;
+      line-height: 1.45;
+    }
+
+    .check-row {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .check-row:last-child {
+      border-bottom: none;
+    }
+
+    .check-pass {
+      color: var(--success);
+    }
+
+    .check-fail {
+      color: var(--danger);
+    }
+
+    .check-manual {
+      color: var(--muted);
+    }
+
+    .file-input {
+      font-size: 0.72rem;
+      margin-top: 0.35rem;
+      padding: 0.35rem;
+    }
+
+    /* Leaflet Popup Styles */
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-content {
+      margin: 12px 16px !important;
+      line-height: 1.4;
+    }
+    .leaflet-popup-close-button {
+      color: var(--muted) !important;
+    }
+    .shop-popup h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.15rem;
+    }
+    .shop-popup p {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .popup-offer {
+      border-top: 1px solid var(--border);
+      padding: 0.45rem 0 0;
+      margin-top: 0.45rem;
+    }
+    .popup-offer p {
+      color: var(--text);
+    }
+    .popup-offer .btn {
+      font-size: 0.75rem;
+      padding: 0.3rem 0.6rem;
+      margin-top: 0.25rem;
+      width: auto;
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(10, 10, 12, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay[hidden] {
+      display: none;
+    }
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+    }
+    .modal-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }
+    .modal-header h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+      width: auto;
+    }
+    .modal-close:hover {
+      color: var(--text);
+    }
+    .modal-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="brand-lockup">
+      <img class="brand-logo" src="/hoibo-scenarios/assets/logo-orange.svg" alt="Hoibò" />
+      <div>
+        <h1>Scenarios</h1>
+        <p>Field acceptance tests — catalog playbook is the spec · tap map for centre</p>
+      </div>
+    </div>
+    <nav>
+      <button type="button" class="btn btn-secondary font-sm mr-2" id="btn-open-log-modal" style="width: auto; padding: 0.35rem 0.75rem;">Add Phone Log</button>
+      
+    </nav>
+  </header>
+  <div class="env-strip" id="env-strip">
+    <span>Console writes to</span>
+    <span class="env-pill stage" id="walk-env-pill">…</span>
+    <div class="env-target-btns" id="walk-env-btns">
+      <button type="button" data-target="stage" class="active">Stage</button>
+      <button type="button" data-target="prod">Prod</button>
+    </div>
+    <span class="hint" id="walk-env-msg">Run state stored in Supabase Storage on this env.</span>
+  </div>
+  <div class="layout">
+    <aside class="panel">
+      <label for="category" class="form-label">Category</label>
+      <select id="category"></select>
+      <label for="preset" class="form-label">Scenario</label>
+      <select id="preset"></select>
+      <p class="hint" id="preset-desc"></p>
+      <p class="hint" id="preset-seed"></p>
+      <div class="playbook" id="playbook-preview" hidden>
+        <h3>Scenario steps &amp; validation</h3>
+        <ol id="playbook-steps"></ol>
+        <div class="expect" id="playbook-expect" hidden>
+          <strong>Expected evidence (field log):</strong>
+          <ul id="playbook-expect-list"></ul>
+        </div>
+      </div>
+
+      <label class="form-label">Walk centre</label>
+      <button type="button" class="btn btn-secondary" id="btn-gps">Use my location</button>
+      <p class="hint">Click or long-press the map to drop the orange centre dot. Shops use map pins inside the circle.
+      </p>
+      <div class="coords-row">
+        <div><label for="lat" class="form-label">Lat</label><input id="lat" type="number" step="any" readonly placeholder="—" /></div>
+        <div><label for="lng" class="form-label">Lng</label><input id="lng" type="number" step="any" readonly placeholder="—" /></div>
+      </div>
+
+      <div id="redeem-phone-block" hidden>
+        <label for="phone" class="form-label">Mac Redeem — which phone?</label>
+        <select id="phone"></select>
+        <p class="hint" id="phone-hint"></p>
+      </div>
+
+      <label class="form-label">Devices for this run</label>
+      <div class="device-pick" id="device-pick">
+        <p class="hint">Loading devices…</p>
+      </div>
+      <p class="hint">Tick phones used (user + merchant). Saved in run log.</p>
+
+      <button type="button" class="btn btn-primary" id="btn-run" disabled>Run scenario</button>
+      <p class="hint" id="run-hint" hidden></p>
+      <button type="button" class="btn btn-secondary" id="btn-load-run">Load active run</button>
+      <button type="button" class="btn btn-danger" id="btn-cleanup" disabled>Finish &amp; remove</button>
+      <button type="button" class="btn btn-secondary" id="btn-abandon" disabled hidden>Abandon run</button>
+      <p class="hint" id="cleanup-hint"></p>
+
+      <div class="status" id="status">Load presets…</div>
+
+      <div class="run-history" id="run-history">
+        <h3 style="font-size:0.85rem;margin-bottom:0.5rem;">Run log</h3>
+        <p class="hint" id="run-history-empty">No runs yet.</p>
+        <table id="run-history-table" hidden>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Scenario</th>
+              <th>Devices</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="run-history-body"></tbody>
+        </table>
+      </div>
+
+      <div class="shop-list" id="shop-list"></div>
+    </aside>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-hint" id="map-hint">Min zoom = Greater London · tap map to set centre pin</div>
+    </div>
+  </div>
+
+  <!-- Log Checker Modal -->
+  <div class="modal-overlay" id="log-modal" hidden>
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Field log check</h2>
+        <button type="button" class="modal-close" id="btn-close-log-modal">&times;</button>
+      </header>
+      <div class="modal-body">
+        <div class="workflow-note mb-3">
+          <strong>After your walk:</strong><br />
+          <strong>Phone:</strong> Settings → <em>Deal alert test log</em> → <strong>Upload log</strong> (cloud).<br />
+          <strong>Mac:</strong> pick phone below → <em>Load cloud log</em>, or paste JSON → <em>Check log</em>.
+        </div>
+        <div class="log-check mt-0 mb-0" id="log-check" style="border: none; background: transparent; padding: 0;">
+          <label for="log-phone" class="form-label">Phone (cloud upload)</label>
+          <div class="btn-row" style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <select id="log-phone"></select>
+            <button type="button" class="btn btn-secondary" id="btn-fetch-cloud-log" style="width: auto; padding: 0.45rem 0.75rem;">Load cloud log</button>
+          </div>
+          <p class="hint" id="cloud-log-status"></p>
+          <p class="hint mt-0">Or paste JSON manually. LLM prompt for multi-day or category-off.</p>
+          <input type="file" id="log-file" class="file-input" accept=".json,application/json,text/plain" />
+          <textarea id="log-json" placeholder='[{"at":"…","gateDecision":"suppress","opportunitySum":7.2,…}]'></textarea>
+          <div class="btn-row mt-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <button type="button" class="btn btn-primary" id="btn-check-log">Check log</button>
+            <button type="button" class="btn btn-secondary" id="btn-copy-llm">Copy LLM prompt</button>
+          </div>
+          <div class="check-list mt-3" id="check-results" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="hosted-crypto.js"></script>
+  <script src="hosted-bootstrap.js"></script>
+  <script>
+    const PHONE_SLOT_KEY = "walk_scenario_phone_slot";
+    const CENTER_KEY = "walk_scenario_center";
+    const DEVICES_SH = "dev_console/scripts/app/devices.sh";
+
+    let catalog = null;
+    let scenarioList = [];
+    let customerPhones = [];
+    let registryDevices = [];
+    let envStatus = null;
+    let consoleEnvLabel = "STAGE";
+    let currentRun = null;
+    let map;
+    let centerMarker = null;
+    let radiusCircle = null;
+    let shopMarkers = [];
+    let radiusM = 800;
+    let hasCenter = false;
+    let suppressNextClick = false;
+    let lastAnalysis = null;
+    let isSeeding = false;
+    let playbookProgress = [];
+    let lastPlaybook = { steps: [], expects: [], multiDay: false };
+
+    const DEVICES_PICK_KEY = "walk_scenario_device_slots";
+
+    const el = (id) => document.getElementById(id);
+
+    function formatWhen(iso) {
+      if (!iso) return "—";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+      } catch (_) {
+        return iso.slice(0, 16);
+      }
+    }
+
+    function formatDuration(seconds) {
+      if (seconds == null) return "";
+      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+      return `${(seconds / 3600).toFixed(1)}h`;
+    }
+
+    function statusTag(row) {
+      const st = row.status || "unknown";
+      const out = row.outcome;
+      if (st === "in_progress") return '<span class="tag progress">in progress</span>';
+      if (out === "pass") return '<span class="tag pass">pass</span>';
+      if (out === "fail") return '<span class="tag fail">fail</span>';
+      if (out === "partial") return '<span class="tag">partial</span>';
+      if (st === "completed") return '<span class="tag pass">done</span>';
+      if (st === "abandoned") return '<span class="tag fail">abandoned</span>';
+      if (st === "superseded") return '<span class="tag">superseded</span>';
+      if (st === "failed") return '<span class="tag fail">seed failed</span>';
+      return `<span class="tag">${st}</span>`;
+    }
+
+    function deviceNames(devices) {
+      if (!devices?.length) return "—";
+      return devices.map((d) => d.name || d.slot || "?").join(", ");
+    }
+
+    function selectedDevices() {
+      const boxes = el("device-pick").querySelectorAll('input[type="checkbox"]:checked');
+      const slots = new Set([...boxes].map((b) => b.value));
+      return registryDevices.filter((d) => slots.has(String(d.slot)));
+    }
+
+    function savedDeviceSlots() {
+      try {
+        return JSON.parse(localStorage.getItem(DEVICES_PICK_KEY) || "[]");
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function renderDevicePick() {
+      const box = el("device-pick");
+      if (!registryDevices.length) {
+        box.innerHTML = `<p class="hint">No devices.json — copy devices.json.example</p>`;
+        return;
+      }
+      const saved = new Set(savedDeviceSlots());
+      box.innerHTML = registryDevices
+        .map((d) => {
+          const roles = (d.roles || []).join("+") || "device";
+          const checked = saved.has(String(d.slot)) ? " checked" : "";
+          return `<label><input type="checkbox" value="${d.slot}" data-device-slot="${d.slot}"${checked} /> ${d.name} <span class="hint">(${roles} · ${d.backend_env || "stage"})</span></label>`;
+        })
+        .join("");
+      box.querySelectorAll("input").forEach((input) => {
+        input.onchange = () => {
+          const slots = [...box.querySelectorAll("input:checked")].map((i) => i.value);
+          localStorage.setItem(DEVICES_PICK_KEY, JSON.stringify(slots));
+          syncRunDevices();
+        };
+      });
+    }
+
+    function applyRunDevicesToPick(devices) {
+      if (!devices?.length) return;
+      const slots = new Set(devices.map((d) => String(d.slot)));
+      el("device-pick").querySelectorAll("input").forEach((input) => {
+        input.checked = slots.has(input.value);
+      });
+    }
+
+    async function syncRunDevices() {
+      if (!currentRun?.run_id) return;
+      try {
+        const data = await api(`/api/scenarios/run/${currentRun.run_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ devices: selectedDevices() }),
+        });
+        currentRun = data.run;
+      } catch (_) {
+        /* ignore — run may have been removed */
+      }
+    }
+
+    async function loadRunHistory() {
+      try {
+        const data = await api("/api/scenarios/history");
+        const rows = data.history || [];
+        const empty = el("run-history-empty");
+        const table = el("run-history-table");
+        const body = el("run-history-body");
+        if (!rows.length) {
+          empty.hidden = false;
+          table.hidden = true;
+          return;
+        }
+        empty.hidden = true;
+        table.hidden = false;
+        body.innerHTML = rows
+          .slice(0, 25)
+          .map((r) => {
+            const dur = formatDuration(r.duration_seconds);
+            const when = `${formatWhen(r.started_at)}${dur ? ` · ${dur}` : ""}`;
+            const label = r.scenario_label || r.scenario_id || "—";
+            return `<tr>
+              <td>${when}<br /><span class="hint">${r.console_env || ""} ${r.short_id || ""}</span></td>
+              <td>${label}</td>
+              <td>${deviceNames(r.devices)}</td>
+              <td>${statusTag(r)}</td>
+            </tr>`;
+          })
+          .join("");
+      } catch (_) {
+        /* history optional if server old */
+      }
+    }
+
+    function cleanupHintText(run) {
+      if (run?.cleanup_when) return `When to remove: ${run.cleanup_when}`;
+      const p = scenarioList.find((x) => x.id === (run?.scenario_id || run?.preset_id || el("preset").value));
+      if (p?.cleanupWhen) return `When to remove: ${p.cleanupWhen}`;
+      return "When to remove: after field log check PASS (see playbook last step).";
+    }
+
+    function updateCleanupHint(run) {
+      el("cleanup-hint").textContent = currentRun
+        ? cleanupHintText(currentRun)
+        : cleanupHintText(null);
+    }
+
+    function updateRunButtons() {
+      const runBtn = el("btn-run");
+      const cleanupBtn = el("btn-cleanup");
+      const abandonBtn = el("btn-abandon");
+      const hint = el("run-hint");
+      const env = consoleEnvLabel || "STAGE";
+      if (isSeeding) {
+        runBtn.disabled = true;
+        runBtn.textContent = `Seeding ${env}…`;
+        cleanupBtn.disabled = true;
+        if (abandonBtn) abandonBtn.disabled = true;
+        hint.hidden = false;
+        hint.textContent = `Wait — wiping prior WALK· data, then writing merchants to ${env}.`;
+        return;
+      }
+      runBtn.textContent = currentRun
+        ? `Replace scenario on ${env} (wipes current)`
+        : `Run scenario on ${env} (wipes prior WALK·)`;
+      runBtn.disabled = !hasCenter;
+      cleanupBtn.disabled = !currentRun;
+      if (abandonBtn) {
+        abandonBtn.hidden = !currentRun;
+        abandonBtn.disabled = !currentRun;
+      }
+      if (!hasCenter) {
+        hint.hidden = false;
+        hint.textContent = "Set centre pin first — then Run scenario.";
+      } else if (currentRun) {
+        hint.hidden = false;
+        hint.textContent =
+          `Run ${currentRun.short_id} is live on ${env}. Run again to replace, or Remove when playbook PASS.`;
+      } else {
+        hint.hidden = true;
+      }
+    }
+    const statusEl = el("status");
+
+    function setStatus(msg, ok) {
+      statusEl.textContent = msg;
+      statusEl.className = "status" + (ok === true ? " ok" : ok === false ? " err" : "");
+    }
+
+    async function api(path, opts) {
+      if (typeof window.__hostedScenariosApi === "function") {
+        return window.__hostedScenariosApi(path, opts);
+      }
+      const res = await fetch(path, opts);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+
+    const LEAFLET_IMAGES = "https://unpkg.com/leaflet@1.9.4/dist/images/";
+    const centrePinIcon = L.divIcon({
+      className: "center-pin",
+      html: '<div class="center-pin-dot"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    const shopPinIcon = L.icon({
+      iconUrl: `${LEAFLET_IMAGES}marker-icon.png`,
+      iconRetrievalUrl: `${LEAFLET_IMAGES}marker-icon-2x.png`,
+      shadowUrl: `${LEAFLET_IMAGES}marker-shadow.png`,
+      iconSize: [28, 46],
+      iconAnchor: [14, 46],
+      popupAnchor: [1, -40],
+      shadowSize: [46, 46],
+      shadowAnchor: [14, 46],
+    });
+
+    /** Greater London — walk centre pin must stay inside this box. */
+    const LONDON_BOUNDS = L.latLngBounds(
+      [51.28, -0.55],
+      [51.72, 0.35]
+    );
+    /** Cannot zoom out wider than ~Greater London. Pan is free (no snap-back). */
+    const LONDON_MIN_ZOOM = 10;
+
+    function clampToLondon(lat, lng) {
+      return L.latLng(
+        Math.min(LONDON_BOUNDS.getNorth(), Math.max(LONDON_BOUNDS.getSouth(), lat)),
+        Math.min(LONDON_BOUNDS.getEast(), Math.max(LONDON_BOUNDS.getWest(), lng))
+      );
+    }
+
+    function refreshMapSize() {
+      if (!map) return;
+      map.invalidateSize({ pan: false });
+    }
+
+    function initMap() {
+      map = L.map("map", {
+        tapTolerance: 15,
+        minZoom: LONDON_MIN_ZOOM,
+      });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap",
+        minZoom: LONDON_MIN_ZOOM,
+        maxZoom: 19,
+      }).addTo(map);
+
+      map.setView([51.5074, -0.2214], 13);
+
+      requestAnimationFrame(() => {
+        refreshMapSize();
+        map.setView([51.5074, -0.2214], 13);
+      });
+
+      window.addEventListener("resize", refreshMapSize);
+
+      map.on("click", (e) => {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
+        const p = clampToLondon(e.latlng.lat, e.latlng.lng);
+        setCenter(p.lat, p.lng, { pan: false });
+      });
+
+      setupLongPress();
+    }
+
+    function setupLongPress() {
+      const container = map.getContainer();
+      let timer = null;
+      let start = null;
+
+      const clear = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        start = null;
+      };
+
+      container.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0];
+        start = { x: t.clientX, y: t.clientY, px: map.mouseEventToContainerPoint(t) };
+        timer = setTimeout(() => {
+          if (!start) return;
+          const latlng = map.containerPointToLatLng(start.px);
+          const p = clampToLondon(latlng.lat, latlng.lng);
+          suppressNextClick = true;
+          setCenter(p.lat, p.lng);
+          setStatus("Centre pin moved (long-press).", true);
+          clear();
+        }, 480);
+      }, { passive: true });
+
+      container.addEventListener("touchmove", (e) => {
+        if (!start || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        if (Math.hypot(t.clientX - start.x, t.clientY - start.y) > 12) clear();
+      }, { passive: true });
+
+      container.addEventListener("touchend", clear, { passive: true });
+      container.addEventListener("touchcancel", clear, { passive: true });
+    }
+
+    function drawRadiusCircle(lat, lng) {
+      if (radiusCircle) map.removeLayer(radiusCircle);
+      radiusCircle = L.circle([lat, lng], {
+        radius: radiusM,
+        color: "#f59207",
+        weight: 2,
+        fillColor: "#f59207",
+        fillOpacity: 0.08,
+        dashArray: "6 4",
+      }).addTo(map);
+    }
+
+    function setCenter(lat, lng, opts = {}) {
+      const p = clampToLondon(lat, lng);
+      hasCenter = true;
+      el("lat").value = p.lat.toFixed(6);
+      el("lng").value = p.lng.toFixed(6);
+      localStorage.setItem(CENTER_KEY, JSON.stringify({ lat: p.lat, lng: p.lng }));
+      updateRunButtons();
+
+      if (centerMarker) map.removeLayer(centerMarker);
+      centerMarker = L.marker([p.lat, p.lng], { icon: centrePinIcon, zIndexOffset: 1000 })
+        .addTo(map)
+        .bindPopup("Walk centre — shops scatter within 800 m");
+
+      drawRadiusCircle(p.lat, p.lng);
+
+      if (opts.pan !== false) map.setView([p.lat, p.lng], Math.max(map.getZoom(), 15));
+    }
+
+    function clearShopMarkers() {
+      shopMarkers.forEach((m) => map.removeLayer(m));
+      shopMarkers = [];
+    }
+
+    function showRun(run) {
+      currentRun = run;
+      clearShopMarkers();
+
+      const r = run.radius_m || radiusM;
+      if (run.center) {
+        radiusM = r;
+        setCenter(run.center.lat, run.center.lng, { pan: false });
+        drawRadiusCircle(run.center.lat, run.center.lng);
+      }
+
+      const bounds = [];
+      if (run.center) bounds.push([run.center.lat, run.center.lng]);
+
+      const list = el("shop-list");
+      list.innerHTML = ""; // Empty sidebar list since redeem elements are now in the map popup
+
+      run.shops.forEach((shop, shopIndex) => {
+        const role = shop.role ? ` · ${shop.role}` : "";
+        
+        let offersHtml = "";
+        shop.offers.forEach((offer, offerIndex) => {
+          offersHtml += `
+            <div class="popup-offer">
+              <p class="font-sm mb-1">${offer.title}</p>
+              <button type="button" class="btn btn-primary" onclick="redeemShop(${shopIndex}, ${offerIndex}, this)">Redeem (real API)</button>
+            </div>
+          `;
+        });
+        
+        const popupHtml = `
+          <div class="shop-popup">
+            <h3>${shop.trading_name}</h3>
+            <p class="mb-2">${shop.category}${role}</p>
+            ${offersHtml}
+          </div>
+        `;
+
+        const m = L.marker([shop.lat, shop.lng], { icon: shopPinIcon }).addTo(map)
+          .bindPopup(popupHtml);
+
+        shopMarkers.push(m);
+        bounds.push([shop.lat, shop.lng]);
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
+        refreshMapSize();
+      }
+
+      el("redeem-phone-block").hidden = false;
+      updatePhoneHint();
+
+      const centre = run.center
+        ? `${run.center.lat.toFixed(5)}, ${run.center.lng.toFixed(5)}`
+        : "—";
+      renderPlaybook(run.playbook || [], run.field_log_expect || [], run.multi_day);
+      const multi = run.multi_day ? "\nMulti-day: do NOT cleanup until playbook finished." : "";
+      const seed = run.seed_line || `${run.shop_count} merchants, ${run.offer_count || "?"} offers`;
+      setStatus(
+        `Run ${run.short_id} — ${run.scenario_label || run.preset_label}\nSeed: ${seed}\nCentre ${centre} · ${r} m radius.\n${run.summary || ""}${multi}\nIDs: ${(run.acceptance_ids || []).join(", ")}`,
+        true
+      );
+      updateRunButtons();
+      updateCleanupHint(run);
+      applyRunDevicesToPick(run.devices);
+      refreshPlaybookStatus();
+    }
+
+    function stepMark(status) {
+      if (status === "pass") return '<span class="step-mark step-pass">✓</span>';
+      if (status === "fail") return '<span class="step-mark step-fail">✗</span>';
+      if (status === "pending") return '<span class="step-mark step-pending">○</span>';
+      return '<span class="step-mark step-manual">·</span>';
+    }
+
+    async function refreshPlaybookStatus() {
+      const steps = lastPlaybook.steps;
+      if (!steps.length) return;
+      try {
+        const body = {
+          scenario_id: el("preset").value,
+          run_id: currentRun?.run_id,
+          run_active: !!currentRun,
+        };
+        const log = el("log-json").value.trim();
+        if (log) body.logJson = log;
+        if (lastAnalysis && typeof lastAnalysis.ok === "boolean") {
+          body.field_log_ok = lastAnalysis.ok;
+        }
+        const data = await api("/api/scenarios/playbook-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        playbookProgress = data.playbookSteps || [];
+        paintPlaybookList();
+      } catch (_) { /* keep last marks */ }
+    }
+
+    function paintPlaybookList() {
+      const ol = el("playbook-steps");
+      const steps = lastPlaybook.steps;
+      const byStep = Object.fromEntries(
+        (playbookProgress || []).map((p) => [String(p.step), p])
+      );
+      ol.innerHTML = "";
+      steps.forEach((s) => {
+        const li = document.createElement("li");
+        const prog = byStep[String(s.step)];
+        const mark = prog ? stepMark(prog.status) : stepMark(s.verify === "manual" ? "manual" : "pending");
+        const detail = prog?.detail && prog.verify !== "manual"
+          ? `<span class="step-detail">${prog.detail}</span>`
+          : (s.verify === "manual" ? '<span class="step-detail">Phone only — confirm yourself</span>' : "");
+        li.innerHTML = `${mark}<span class="who">${s.who || "Step"}</span> — ${s.do}${detail}`;
+        ol.appendChild(li);
+      });
+    }
+
+    function renderPlaybook(steps, expects, multiDay) {
+      const box = el("playbook-preview");
+      const expectBox = el("playbook-expect");
+      const expectList = el("playbook-expect-list");
+      lastPlaybook = { steps: steps || [], expects: expects || [], multiDay: !!multiDay };
+      if (!steps.length) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      paintPlaybookList();
+      if (multiDay) {
+        const li = document.createElement("li");
+        li.innerHTML = '<span class="who">Important</span> — Keep scenario on STAGE until all days done.';
+        ol.appendChild(li);
+      }
+      if (expects && expects.length) {
+        expectBox.hidden = false;
+        expectList.innerHTML = "";
+        expects.forEach((e) => {
+          const li = document.createElement("li");
+          li.textContent = e;
+          expectList.appendChild(li);
+        });
+      } else {
+        expectBox.hidden = true;
+      }
+    }
+
+    function selectedPhone() {
+      const slot = el("phone").value;
+      return customerPhones.find((p) => p.slot === slot) || null;
+    }
+
+    function resolveAppId(phone) {
+      return phone?.app_id || null;
+    }
+
+    function devicesShVar(slot) {
+      return slot === "user" ? "FLASHSALE_USER_APP_ID" : "FLASHSALE_USER2_APP_ID";
+    }
+
+    function updatePhoneHint() {
+      const phone = selectedPhone();
+      if (!phone) return;
+      const appId = resolveAppId(phone);
+      if (appId) {
+        el("phone-hint").textContent =
+          `${phone.name} is linked. Open that deal’s QR screen on the phone, then tap Redeem here.`;
+        return;
+      }
+      el("phone-hint").textContent =
+        `${phone.name} not linked yet. Copy app id from Deal alert test log on the phone → set ${devicesShVar(phone.slot)} in ${DEVICES_SH} → restart dev console.`;
+    }
+
+    function fillPhones(phones) {
+      customerPhones = phones;
+      const sel = el("phone");
+      sel.innerHTML = "";
+      phones.forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p.slot;
+        o.textContent = p.name;
+        if (!p.app_id) o.textContent += " (no app_id)";
+        sel.appendChild(o);
+      });
+      const saved = localStorage.getItem(PHONE_SLOT_KEY);
+      if (saved && phones.some((p) => p.slot === saved)) sel.value = saved;
+      sel.onchange = () => {
+        localStorage.setItem(PHONE_SLOT_KEY, sel.value);
+        updatePhoneHint();
+      };
+      updatePhoneHint();
+
+      const logSel = el("log-phone");
+      if (!logSel) return;
+      logSel.innerHTML = "";
+      phones.forEach((p) => {
+        if (!p.app_id) return;
+        const o = document.createElement("option");
+        o.value = p.app_id;
+        o.textContent = p.name;
+        logSel.appendChild(o);
+      });
+      if (!logSel.options.length) {
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = "(add customer_app_id in devices.json)";
+        logSel.appendChild(o);
+      }
+    }
+
+    async function fetchCloudLog() {
+      const appId = el("log-phone")?.value;
+      const statusEl = el("cloud-log-status");
+      if (!appId) {
+        if (statusEl) statusEl.textContent = "Set app_id in devices.json for this phone.";
+        return;
+      }
+      if (statusEl) statusEl.textContent = "Loading uploads…";
+      try {
+        const data = await api(
+          `/api/scenarios/field-logs?app_id=${encodeURIComponent(appId)}&limit=5`
+        );
+        const uploads = data.uploads || [];
+        if (!uploads.length) {
+          if (statusEl) statusEl.textContent = "No uploads yet — tap Upload log on the phone.";
+          return;
+        }
+        const latest = uploads[0];
+        const full = await api("/api/scenarios/field-logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: latest.path }),
+        });
+        const entries = full.entries || full.document?.entries || [];
+        el("log-json").value = JSON.stringify(entries, null, 2);
+        const doc = full.document || {};
+        if (doc.scenario_id) {
+          const catSel = el("category");
+          const presetSel = el("preset");
+          const match = scenarioList.find((s) => s.id === doc.scenario_id);
+          if (match && catSel) {
+            catSel.value = match.category || "intent";
+            catSel.dispatchEvent(new Event("change"));
+            presetSel.value = doc.scenario_id;
+            presetSel.dispatchEvent(new Event("change"));
+          }
+        }
+        if (statusEl) {
+          statusEl.textContent = `Loaded ${entries.length} entries · ${doc.uploaded_at || latest.path}`;
+        }
+        refreshPlaybookStatus();
+      } catch (e) {
+        if (statusEl) statusEl.textContent = String(e.message || e);
+      }
+    }
+
+    async function redeemShop(shopIndex, offerIndex, btn) {
+      const phone = selectedPhone();
+      const appId = resolveAppId(phone);
+      
+      let statusContainer = null;
+      if (btn && btn.parentNode) {
+        statusContainer = btn.parentNode.querySelector(".popup-status");
+        if (!statusContainer) {
+          statusContainer = document.createElement("div");
+          statusContainer.className = "popup-status mt-1 font-xs";
+          btn.parentNode.appendChild(statusContainer);
+        }
+        statusContainer.textContent = "Redeeming...";
+        statusContainer.className = "popup-status mt-1 font-xs text-accent";
+      }
+
+      if (!appId) {
+        const msg = `${phone?.name || "Phone"} not in devices.sh — set ${devicesShVar(phone?.slot || "user")} (copy from Deal alert test log on phone).`;
+        setStatus(msg, false);
+        if (statusContainer) {
+          statusContainer.textContent = "Error: App ID not set";
+          statusContainer.className = "popup-status mt-1 font-xs text-danger";
+        }
+        return;
+      }
+      if (!currentRun) {
+        setStatus("No active run.", false);
+        if (statusContainer) {
+          statusContainer.textContent = "Error: No active run";
+          statusContainer.className = "popup-status mt-1 font-xs text-danger";
+        }
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const data = await api("/api/scenarios/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            run_id: currentRun.run_id,
+            shop_index: shopIndex,
+            offer_index: offerIndex,
+            app_id: appId,
+          }),
+        });
+        const msg = `${data.shop}\n${data.offer_title}: ${data.scan_result}\n${data.hint}`;
+        setStatus(msg, data.ok);
+        if (statusContainer) {
+          if (data.ok) {
+            statusContainer.textContent = `Success: ${data.scan_result}`;
+            statusContainer.className = "popup-status mt-1 font-xs text-success";
+          } else {
+            statusContainer.textContent = `Failed: ${data.scan_result}`;
+            statusContainer.className = "popup-status mt-1 font-xs text-danger";
+          }
+        }
+      } catch (e) {
+        const errorMsg = String(e.message || e);
+        setStatus(errorMsg, false);
+        if (statusContainer) {
+          statusContainer.textContent = `Error: ${errorMsg}`;
+          statusContainer.className = "popup-status mt-1 font-xs text-danger";
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function fillPresets() {
+      const categorySel = el("category");
+      const presetSel = el("preset");
+      const categories = catalog?.categories || [{ id: "intent", label: "Intent field tests" }];
+      categorySel.innerHTML = "";
+      categories.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.label;
+        categorySel.appendChild(o);
+      });
+      const renderPresetOptions = () => {
+        const cat = categorySel.value;
+        presetSel.innerHTML = "";
+        scenarioList
+          .filter((p) => (p.category || "intent") === cat)
+          .forEach((p) => {
+            const o = document.createElement("option");
+            o.value = p.id;
+            o.textContent = p.label;
+            presetSel.appendChild(o);
+          });
+        presetSel.dispatchEvent(new Event("change"));
+      };
+      categorySel.onchange = renderPresetOptions;
+      presetSel.onchange = () => {
+        const p = scenarioList.find((x) => x.id === presetSel.value);
+        if (!p) return;
+        el("preset-desc").textContent = [p.summary, p.engineRef].filter(Boolean).join(" · ");
+        el("preset-seed").textContent = p.seedLine
+          ? `On map after Run: ${p.seedLine}`
+          : "";
+        renderPlaybook(p.playbook || [], p.fieldLogExpect || [], p.multiDay);
+        if (!currentRun) updateCleanupHint(null);
+        refreshPlaybookStatus();
+      };
+      renderPresetOptions();
+    }
+
+    function prodRunConfirmed() {
+      if (consoleEnvLabel !== "PROD") return true;
+      const typed = prompt(
+        "PROD pre-launch test mode.\nType PROD to wipe WALK· merchants and seed this scenario:"
+      );
+      return typed === "PROD";
+    }
+
+    async function runScenario() {
+      if (!hasCenter) {
+        setStatus("Set centre pin first — tap map or GPS.", false);
+        return;
+      }
+      if (currentRun?.multi_day) {
+        const ok = confirm(
+          "This is a multi-day run. Replacing it will delete seeded shops and break WALK-04 style tests. Continue?"
+        );
+        if (!ok) return;
+      } else if (currentRun) {
+        const ok = confirm(`Replace run ${currentRun.short_id} on ${consoleEnvLabel}?`);
+        if (!ok) return;
+      }
+      if (!prodRunConfirmed()) {
+        setStatus("PROD run cancelled.", false);
+        return;
+      }
+      const body = {
+        preset_id: el("preset").value,
+        lat: parseFloat(el("lat").value),
+        lng: parseFloat(el("lng").value),
+        radius_m: radiusM,
+        confirm_prod: consoleEnvLabel === "PROD",
+        devices: selectedDevices(),
+      };
+      isSeeding = true;
+      updateRunButtons();
+      setStatus(`Wiping prior WALK· on ${consoleEnvLabel}, then seeding…`);
+      try {
+        const data = await api("/api/scenarios/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        showRun(data.run);
+        const wiped = data.prep?.wiped_runs?.length || 0;
+        setStatus(
+          wiped
+            ? `Seeded on ${consoleEnvLabel} (replaced ${wiped} prior run${wiped === 1 ? "" : "s"}).`
+            : `Seeded on ${consoleEnvLabel}.`,
+          true
+        );
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      } finally {
+        isSeeding = false;
+        updateRunButtons();
+      }
+    }
+
+    async function loadActiveRun() {
+      try {
+        const data = await api("/api/scenarios/runs");
+        const runs = data.runs || [];
+        if (!runs.length) {
+          setStatus(`No in-progress run on ${consoleEnvLabel}. Run a scenario or check Run log.`, false);
+          return;
+        }
+        const pick = runs[0];
+        const full = await api(`/api/scenarios/run/${pick.run_id}`);
+        showRun(full.run);
+        if (runs.length > 1) {
+          setStatus(`Loaded newest active run ${pick.run_id.slice(0, 8)} (${runs.length} active on ${consoleEnvLabel}).`, true);
+        }
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    }
+
+    async function setConsoleTarget(target) {
+      await api("/api/environment/target", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+      const envRes = await api("/api/environment");
+      consoleEnvLabel = envRes?.console?.label || target.toUpperCase();
+      renderWalkEnv(envRes);
+      currentRun = null;
+      clearShopMarkers();
+      el("shop-list").innerHTML = "";
+      el("redeem-phone-block").hidden = true;
+      updateRunButtons();
+      await loadRunHistory();
+      setStatus(`Console target → ${consoleEnvLabel}. Map cleared — load active run or Run scenario.`, true);
+    }
+
+    function renderWalkEnv(envRes) {
+      const pill = el("walk-env-pill");
+      const env = envRes?.console?.env || "stage";
+      pill.textContent = envRes?.console?.label || env.toUpperCase();
+      pill.className = "env-pill " + (env === "prod" ? "prod" : env === "local" ? "local" : "stage");
+      el("walk-env-btns").querySelectorAll("button").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.target === env);
+      });
+      const msg = el("walk-env-msg");
+      if (envRes?.mismatch) {
+        msg.textContent = envRes.message || "Env mismatch — align app build with console target.";
+      } else {
+        msg.textContent = "Run JSON in Supabase Storage · shops in DB when scenario is running.";
+      }
+    }
+
+    async function loadLastRun() {
+      return loadActiveRun();
+    }
+
+    async function cleanupRun() {
+      if (!currentRun) { setStatus("Nothing to remove.", false); return; }
+      const outcomeRaw = prompt(
+        "Finish run — outcome?\n\npass · fail · partial · (blank = unknown)",
+        lastAnalysis?.ok === true ? "pass" : lastAnalysis?.ok === false ? "fail" : ""
+      );
+      if (outcomeRaw === null) return;
+      const outcome = ["pass", "fail", "partial"].includes(outcomeRaw.trim().toLowerCase())
+        ? outcomeRaw.trim().toLowerCase()
+        : undefined;
+      const notes = prompt("Notes (optional — weather, blockers, device quirks)") || undefined;
+      if (!confirm(`Remove scenario ${currentRun.short_id} from ${consoleEnvLabel} and archive run log?`)) return;
+      try {
+        await api("/api/scenarios/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ run_id: currentRun.run_id, outcome, notes }),
+        });
+        currentRun = null;
+        clearShopMarkers();
+        el("shop-list").innerHTML = "";
+        el("redeem-phone-block").hidden = true;
+        setStatus(`Scenario finished and archived on ${consoleEnvLabel}.`, true);
+        updateRunButtons();
+        updateCleanupHint(null);
+        refreshPlaybookStatus();
+        await loadRunHistory();
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    }
+
+    async function abandonRun() {
+      if (!currentRun) return;
+      const notes = prompt("Why abandon? (optional)") || undefined;
+      const wipe = confirm("Also remove seeded shops from DB?\n\nOK = wipe DB · Cancel = keep seed for retry");
+      if (!confirm(`Abandon run ${currentRun.short_id}?`)) return;
+      try {
+        await api("/api/scenarios/abandon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ run_id: currentRun.run_id, notes, cleanup_db: wipe }),
+        });
+        if (wipe) {
+          currentRun = null;
+          clearShopMarkers();
+          el("shop-list").innerHTML = "";
+          el("redeem-phone-block").hidden = true;
+        } else {
+          currentRun.status = "abandoned";
+        }
+        setStatus(wipe ? "Run abandoned — seed removed." : "Run abandoned — seed kept.", true);
+        updateRunButtons();
+        await loadRunHistory();
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    }
+
+    el("log-json").addEventListener("input", () => {
+      refreshPlaybookStatus();
+    });
+
+    el("btn-gps").onclick = () => {
+      if (!navigator.geolocation) { setStatus("Geolocation not available.", false); return; }
+      setStatus("Getting GPS…");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCenter(pos.coords.latitude, pos.coords.longitude);
+          setStatus("Centre pin set from GPS.", true);
+        },
+        (err) => setStatus(err.message, false),
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    };
+
+    function renderCheckResults(data) {
+      const box = el("check-results");
+      if (!data || !data.checks) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      const summaryClass = data.ok ? "check-pass" : "check-fail";
+      let html = `<div class="check-row ${summaryClass}"><strong>${data.summary || ""}</strong></div>`;
+      data.checks.forEach((c) => {
+        let cls = "check-manual";
+        let icon = "○";
+        if (c.pass === true) { cls = "check-pass"; icon = "✓"; }
+        if (c.pass === false) { cls = "check-fail"; icon = "✗"; }
+        const idx = c.matchedEntryIndexes?.length
+          ? ` (entries ${c.matchedEntryIndexes.join(", ")})`
+          : "";
+        html += `<div class="check-row ${cls}">${icon} ${c.id}: ${c.detail}${idx}</div>`;
+      });
+      box.innerHTML = html;
+    }
+
+    async function checkFieldLog() {
+      const raw = el("log-json").value.trim();
+      if (!raw) {
+        setStatus("Paste field log JSON first.", false);
+        return;
+      }
+      const body = {
+        scenario_id: el("preset").value,
+        logJson: raw,
+      };
+      if (currentRun?.run_id) body.run_id = currentRun.run_id;
+      const phone = selectedPhone();
+      if (phone?.app_id) body.app_id = phone.app_id;
+      setStatus("Checking log…");
+      try {
+        const data = await api("/api/scenarios/analyze-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        lastAnalysis = data;
+        playbookProgress = data.playbookSteps || playbookProgress;
+        paintPlaybookList();
+        renderCheckResults(data);
+        setStatus(data.summary || "Check complete.", data.ok);
+      } catch (e) {
+        renderCheckResults(null);
+        setStatus(String(e.message || e), false);
+      }
+    }
+
+    async function copyLlmPrompt() {
+      let prompt = lastAnalysis?.llmPrompt;
+      if (!prompt) {
+        const raw = el("log-json").value.trim();
+        if (!raw) {
+          setStatus("Paste log JSON first, or run Check log.", false);
+          return;
+        }
+        try {
+          const data = await api("/api/scenarios/analyze-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scenario_id: el("preset").value,
+              logJson: raw,
+              run_id: currentRun?.run_id,
+            }),
+          });
+          lastAnalysis = data;
+          prompt = data.llmPrompt;
+        } catch (e) {
+          setStatus(String(e.message || e), false);
+          return;
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(prompt);
+        setStatus("LLM review prompt copied — paste into Cursor or ChatGPT.", true);
+      } catch (_) {
+        setStatus("Could not copy — select text from server response.", false);
+      }
+    }
+
+    el("log-file").onchange = (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        el("log-json").value = String(reader.result || "");
+        setStatus(`Loaded ${file.name}. Tap Check log.`, true);
+        refreshPlaybookStatus();
+      };
+      reader.onerror = () => setStatus("Could not read file.", false);
+      reader.readAsText(file);
+    };
+
+    el("btn-check-log").onclick = checkFieldLog;
+    el("btn-copy-llm").onclick = copyLlmPrompt;
+    el("btn-fetch-cloud-log").onclick = fetchCloudLog;
+
+    el("btn-run").onclick = runScenario;
+    el("btn-load-run").onclick = loadLastRun;
+    el("btn-cleanup").onclick = cleanupRun;
+    el("btn-abandon").onclick = abandonRun;
+
+    // Modal open/close handlers
+    const logModal = el("log-modal");
+    el("btn-open-log-modal").onclick = () => {
+      logModal.hidden = false;
+    };
+    el("btn-close-log-modal").onclick = () => {
+      logModal.hidden = true;
+    };
+    logModal.onclick = (e) => {
+      if (e.target === logModal) {
+        logModal.hidden = true;
+      }
+    };
+
+    (async () => {
+      initMap();
+      try {
+        const [catalogRes, phonesRes, devicesRes, envRes] = await Promise.all([
+          api("/api/scenarios/catalog"),
+          api("/api/scenarios/phones"),
+          api("/api/scenarios/devices").catch(() => ({ devices: [] })),
+          api("/api/environment"),
+        ]);
+        envStatus = envRes;
+        consoleEnvLabel = envRes?.console?.label || "STAGE";
+        renderWalkEnv(envRes);
+        el("walk-env-btns").querySelectorAll("button").forEach((btn) => {
+          btn.onclick = () => setConsoleTarget(btn.dataset.target);
+        });
+
+        catalog = catalogRes.catalog;
+        scenarioList = catalogRes.scenarios || catalog.scenarios || [];
+        fillPhones(phonesRes.phones);
+        registryDevices = devicesRes.devices || [];
+        renderDevicePick();
+        radiusM = catalog.defaultRadiusM || 800;
+        el("map-hint").textContent = `Min zoom ≈ Greater London · ${radiusM} m shop radius · console → ${consoleEnvLabel}`;
+        fillPresets();
+
+        const savedCenter = localStorage.getItem(CENTER_KEY);
+        if (savedCenter) {
+          const c = JSON.parse(savedCenter);
+          setCenter(c.lat, c.lng);
+        }
+
+        setStatus(`Pick scenario → set centre → Run on ${consoleEnvLabel}. Map empty until you run or Load active run.`);
+        updateRunButtons();
+        await loadRunHistory();
+        refreshMapSize();
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    })();
+  </script>
+</body>
+
+</html>
