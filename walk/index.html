@@ -28,7 +28,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260607095938" />
+  <meta name="walk-build" content="20260607100840" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
@@ -258,6 +258,22 @@
     .env-target-btns button:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+
+    .view-only-banner {
+      padding: 0.45rem 1rem;
+      font-size: 0.78rem;
+      background: #1a2a3a;
+      color: #93c5fd;
+      border-bottom: 1px solid var(--border);
+    }
+    .view-only-banner a {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .view-only-banner.control-mode {
+      background: #1a3a2a;
+      color: #6ee7a0;
     }
 
     .active-run-banner {
@@ -650,6 +666,7 @@
     </div>
     <span class="hint" id="walk-env-msg">Run state stored in Supabase Storage on this env.</span>
   </div>
+  <div class="view-only-banner" id="view-only-banner" hidden></div>
   <div class="layout">
     <aside class="panel">
       <div id="scenario-picker-block">
@@ -789,7 +806,13 @@
 
     (function () {
       const h = location.hostname;
-      if ((h === "127.0.0.1" || h === "localhost") && !location.search.includes("local=1")) {
+      const onDevConsole =
+        (h === "127.0.0.1" || h === "localhost") && location.port === "8765";
+      if (
+        (h === "127.0.0.1" || h === "localhost") &&
+        !onDevConsole &&
+        !location.search.includes("local=1")
+      ) {
         location.replace("https://angelorepole.github.io/hoibo-scenarios/walk/");
       }
     })();
@@ -1221,7 +1244,9 @@
     }
 
     function updateRunUiMode() {
+      applyConsoleModeBanner();
       const active = !!currentRun;
+      const hosted = isHostedConsole();
       const picker = el("scenario-picker-block");
       const setup = el("scenario-setup-block");
       const banner = el("scenario-active-banner");
@@ -1229,20 +1254,43 @@
       const history = el("run-history");
       const categorySel = el("category");
       const presetSel = el("preset");
+      const playbook = el("playbook-preview");
 
-      if (picker) picker.hidden = active;
-      if (setup) setup.hidden = active;
-      if (actions) actions.hidden = !active;
-      if (banner) banner.hidden = !active;
-      if (history) history.hidden = active;
+      if (hosted && !active) {
+        if (picker) picker.hidden = true;
+        if (setup) setup.hidden = true;
+        if (actions) actions.hidden = true;
+        if (playbook) playbook.hidden = true;
+        if (banner) banner.hidden = true;
+        if (history) history.hidden = false;
+      } else {
+        if (picker) picker.hidden = active;
+        if (setup) setup.hidden = active || hosted;
+        if (actions) actions.hidden = !active;
+        if (banner) banner.hidden = !active;
+        if (history) history.hidden = active;
+        if (playbook && !active) playbook.hidden = false;
+      }
+
       const phonePrep = el("phone-prep-block");
-      if (phonePrep) phonePrep.hidden = active;
+      if (phonePrep) phonePrep.hidden = active || hosted;
 
-      if (categorySel) categorySel.disabled = active || isSeeding;
-      if (presetSel) presetSel.disabled = active || isSeeding;
+      const runBtn = el("btn-run");
+      const cleanupBtn = el("btn-cleanup");
+      const abandonBtn = el("btn-abandon");
+      if (runBtn) runBtn.hidden = hosted;
+      if (cleanupBtn) cleanupBtn.hidden = hosted;
+      if (abandonBtn) abandonBtn.hidden = hosted || !active;
+      if (el("redeem-phone-block")) {
+        el("redeem-phone-block").hidden = hosted || !active;
+      }
+      el("btn-gps")?.toggleAttribute("disabled", hosted || active);
+
+      if (categorySel) categorySel.disabled = active || isSeeding || (hosted && !active);
+      if (presetSel) presetSel.disabled = active || isSeeding || (hosted && !active);
 
       el("walk-env-btns")?.querySelectorAll("button").forEach((btn) => {
-        btn.disabled = active;
+        btn.disabled = active && canControlRuns();
       });
 
       if (active && banner) {
@@ -1277,6 +1325,16 @@
       const abandonBtn = el("btn-abandon");
       const hint = el("run-hint");
       const env = consoleEnvLabel || "STAGE";
+      if (!canControlRuns()) {
+        if (hint) {
+          hint.hidden = false;
+          hint.textContent = currentRun
+            ? "Follow the playbook and check logs. Finish the run on your Mac when done."
+            : "No active run — open Mac Dev Console → Walk scenarios to start one.";
+        }
+        updateRunUiMode();
+        return;
+      }
       if (isSeeding) {
         runBtn.disabled = true;
         runBtn.textContent = `Seeding ${env}…`;
@@ -1388,7 +1446,7 @@
       window.addEventListener("resize", refreshMapSize);
 
       map.on("click", (e) => {
-        if (currentRun) return;
+        if (currentRun || !canControlRuns()) return;
         if (suppressNextClick) {
           suppressNextClick = false;
           return;
@@ -1647,6 +1705,29 @@
 
     function isHostedConsole() {
       return typeof window.__hostedScenariosApi === "function";
+    }
+
+    /** Run / Finish / Abandon / phone prep — Mac dev console only. Hosted site is view + log check. */
+    function canControlRuns() {
+      return !isHostedConsole();
+    }
+
+    function applyConsoleModeBanner() {
+      const banner = el("view-only-banner");
+      if (!banner) return;
+      if (canControlRuns()) {
+        banner.hidden = false;
+        banner.className = "view-only-banner control-mode";
+        banner.innerHTML =
+          "Mac console — you can <strong>Run</strong>, prepare phones, and <strong>Finish</strong> scenarios here.";
+        return;
+      }
+      banner.hidden = false;
+      banner.className = "view-only-banner";
+      banner.innerHTML =
+        "View only — follow the active run, map, and log check. " +
+        "<strong>Run</strong> and <strong>Finish</strong> need the Mac Dev Console " +
+        '(<a href="http://127.0.0.1:8765/walk/" target="_blank" rel="noopener noreferrer">127.0.0.1:8765/walk</a>).';
     }
 
     function normalizePhone(p) {
@@ -1935,6 +2016,10 @@
     }
 
     async function runScenario() {
+      if (!canControlRuns()) {
+        setStatus("Run is Mac-only — open Dev Console → Walk scenarios.", false);
+        return;
+      }
       if (!hasCenter) {
         setStatus("Set centre pin first — tap map or GPS.", false);
         return;
@@ -2060,6 +2145,10 @@
     }
 
     async function cleanupRun() {
+      if (!canControlRuns()) {
+        setStatus("Finish is Mac-only — open Dev Console → Walk scenarios.", false);
+        return;
+      }
       if (!currentRun) { setStatus("Nothing to remove.", false); return; }
       const outcomeRaw = prompt(
         "Finish run — outcome?\n\npass · fail · partial · (blank = unknown)",
@@ -2092,6 +2181,10 @@
     }
 
     async function abandonRun() {
+      if (!canControlRuns()) {
+        setStatus("Abandon is Mac-only — open Dev Console → Walk scenarios.", false);
+        return;
+      }
       if (!currentRun) return;
       const notes = prompt("Why abandon? (optional)") || undefined;
       const wipe = confirm("Also remove seeded shops from DB?\n\nOK = wipe DB · Cancel = keep seed for retry");
@@ -2294,10 +2387,17 @@
           setCenter(c.lat, c.lng);
         }
 
-        setStatus(`Pick scenario → set centre → Run on ${consoleEnvLabel}.`, true);
+        const loadedActive = await tryLoadActiveRun({ silent: true });
+        setStatus(
+          canControlRuns()
+            ? `Pick scenario → prepare phones → Run on ${consoleEnvLabel}.`
+            : loadedActive
+              ? `Active run on ${consoleEnvLabel} — follow playbook, check logs. Finish on Mac.`
+              : `No active run on ${consoleEnvLabel}. Start from Mac Dev Console.`,
+          true,
+        );
         updateRunButtons();
         await loadRunHistory();
-        await tryLoadActiveRun({ silent: true });
         refreshMapSize();
       } catch (e) {
         setStatus(String(e.message || e), false);

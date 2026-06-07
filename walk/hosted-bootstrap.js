@@ -78,7 +78,7 @@
     const cfg = await getEnvConfig();
     const block = cfg[consoleEnv] || {};
     const preLaunch = !!cfg.preLaunchScenarioTesting;
-    let message = "Hosted Scenarios — run log & field logs via Supabase.";
+    let message = "Hosted Scenarios — view active run, map, and log check. Run/Finish on Mac.";
     if (consoleEnv === "prod" && preLaunch) {
       message = "PROD pre-launch — scenarios only. No DB reset from here.";
     }
@@ -136,6 +136,18 @@
     opts = opts || {};
     const method = (opts.method || "GET").toUpperCase();
     const body = opts.body ? JSON.parse(opts.body) : {};
+
+    const MAC_ONLY =
+      "Run, Finish, and Abandon are Mac Dev Console only (127.0.0.1:8765/walk/). This site is view + log check.";
+    function rejectMacOnly() {
+      throw new Error(MAC_ONLY);
+    }
+    const macOnlyPaths =
+      (path === "/api/scenarios/run" && (method === "POST" || method === "PATCH")) ||
+      (path === "/api/scenarios/abandon" && method === "POST") ||
+      (path === "/api/scenarios/cleanup" && method === "POST") ||
+      (path === "/api/scenarios/redeem" && method === "POST");
+    if (macOnlyPaths) rejectMacOnly();
 
     if (path === "/api/environment") return envStatus();
     if (path === "/api/environment/target" && method === "POST") {
@@ -199,41 +211,6 @@
         console_env: consoleEnv,
       });
       return { ok: true, run: data.run };
-    }
-    if (path === "/api/scenarios/run" && method === "PATCH") {
-      return supabaseFn("scenario-runs", { action: "save", run: body.run });
-    }
-    if (path === "/api/scenarios/abandon" && method === "POST") {
-      const runId = body.run_id;
-      if (!runId) throw new Error("run_id required");
-      return supabaseFn("scenario-runs", {
-        action: "abandon",
-        run_id: runId,
-        console_env: consoleEnv,
-        notes: body.notes,
-        cleanup_db: body.cleanup_db,
-      });
-    }
-    if (path === "/api/scenarios/cleanup" && method === "POST") {
-      const runId = body.run_id;
-      if (!runId) throw new Error("run_id required");
-      return supabaseFn("scenario-runs", {
-        action: "finish",
-        run_id: runId,
-        console_env: consoleEnv,
-        outcome: body.outcome,
-        notes: body.notes,
-      });
-    }
-    if (path === "/api/scenarios/redeem" && method === "POST") {
-      return supabaseFn("scenario-runs", {
-        action: "redeem",
-        console_env: consoleEnv,
-        run_id: body.run_id,
-        shop_index: body.shop_index,
-        offer_index: body.offer_index,
-        app_id: body.app_id,
-      });
     }
     if (path === "/api/scenarios/analyze-log" && method === "POST") {
       const scenarioId = body.scenario_id || body.preset_id;
