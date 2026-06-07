@@ -28,7 +28,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260607090025" />
+  <meta name="walk-build" content="20260607092129" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
@@ -345,6 +345,18 @@
       margin-top: 0.12rem;
     }
 
+    .scenario-purpose {
+      font-size: 0.88rem;
+      line-height: 1.45;
+      margin: 0.35rem 0 0.5rem;
+      color: var(--text);
+    }
+
+    .preset-trace {
+      font-size: 0.68rem;
+      opacity: 0.65;
+    }
+
     .playbook .expect {
       margin-top: 0.5rem;
       padding-top: 0.5rem;
@@ -603,7 +615,9 @@
         <select id="category"></select>
         <label for="preset" class="form-label">Scenario</label>
         <select id="preset"></select>
+        <p class="scenario-purpose" id="preset-purpose" hidden></p>
         <p class="hint" id="preset-desc"></p>
+        <p class="hint preset-trace" id="preset-trace" hidden></p>
         <p class="hint" id="preset-seed"></p>
       </div>
 
@@ -613,10 +627,10 @@
       </div>
 
       <div class="playbook" id="playbook-preview" hidden>
-        <h3 id="playbook-heading">Scenario steps &amp; validation</h3>
+        <h3 id="playbook-heading">What to do</h3>
         <ol id="playbook-steps"></ol>
         <div class="expect" id="playbook-expect" hidden>
-          <strong>Expected evidence (field log):</strong>
+          <strong>Pass looks like:</strong>
           <ul id="playbook-expect-list"></ul>
         </div>
       </div>
@@ -716,6 +730,7 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="scenario-display.js"></script>
   <script src="field-log-analyze.js"></script>
   <script src="playbook-evaluate.js"></script>
   <script src="hosted-crypto.js"></script>
@@ -997,7 +1012,7 @@
       const heading = el("playbook-heading");
       if (!heading) return;
       if (!currentRun) {
-        heading.textContent = "Scenario steps & validation";
+        heading.textContent = "What to do";
         return;
       }
       const total = lastPlaybook.steps.length;
@@ -1384,6 +1399,22 @@
       updatePlaybookHeading();
     }
 
+    function renderScenarioBlurb(p) {
+      const purposeEl = el("preset-purpose");
+      const descEl = el("preset-desc");
+      const traceEl = el("preset-trace");
+      if (purposeEl) {
+        purposeEl.textContent = p.purpose || "";
+        purposeEl.hidden = !p.purpose;
+      }
+      if (descEl) descEl.textContent = p.summary || "";
+      const ids = (p.acceptanceIds || []).filter(Boolean).join(", ");
+      if (traceEl) {
+        traceEl.textContent = ids ? `Test ID: ${ids}` : "";
+        traceEl.hidden = !ids;
+      }
+    }
+
     function renderPlaybook(steps, expects, multiDay) {
       const box = el("playbook-preview");
       const expectBox = el("playbook-expect");
@@ -1680,11 +1711,11 @@
       presetSel.onchange = () => {
         const p = scenarioList.find((x) => x.id === presetSel.value);
         if (!p) return;
-        el("preset-desc").textContent = [p.summary, p.engineRef].filter(Boolean).join(" · ");
+        renderScenarioBlurb(p);
         el("preset-seed").textContent = p.seedLine
           ? `On map after Run: ${p.seedLine}`
           : "";
-        renderPlaybook(p.playbook || [], p.fieldLogExpect || [], p.multiDay);
+        renderPlaybook(p.playbook || [], p.passCriteria || p.fieldLogExpect || [], p.multiDay);
         if (!currentRun) {
           resetOptionalDevicePick();
           updateCleanupHint(null);
@@ -2046,7 +2077,11 @@
         });
 
         catalog = catalogRes.catalog;
-        scenarioList = catalogRes.scenarios || catalog.scenarios || [];
+        const rawList = catalogRes.scenarios || catalog.scenarios || [];
+        const copy = typeof ScenarioDisplay !== "undefined" ? await ScenarioDisplay.loadHumanCopy() : {};
+        scenarioList = rawList.map((s) =>
+          typeof ScenarioDisplay !== "undefined" ? ScenarioDisplay.applyHumanCopy(s, copy) : s,
+        );
         fillPhones(phonesRes.phones);
         registryDevices = devicesRes.devices || [];
         renderDevicePick();

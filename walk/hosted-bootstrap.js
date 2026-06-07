@@ -38,10 +38,11 @@
     return catalogCache;
   }
 
-  function mapScenarioList(catalog) {
-    return (catalog.scenarios || catalog.presets || []).map((s) => ({
+  function mapScenarioBase(s) {
+    return {
       id: s.id,
       label: s.label || s.id,
+      purpose: s.purpose || "",
       summary: s.summary || "",
       category: s.category || "intent",
       engineRef: s.engineRef || "",
@@ -49,7 +50,26 @@
       multiDay: !!s.multiDay,
       playbook: s.playbook || [],
       fieldLogExpect: s.fieldLogExpect || [],
-    }));
+      fieldLogRules: s.fieldLogRules || {},
+      passCriteria: s.passCriteria || s.fieldLogExpect || [],
+      cleanupWhen: s.cleanupWhen || "",
+    };
+  }
+
+  async function mapScenarioList(catalog) {
+    const copy =
+      typeof ScenarioDisplay !== "undefined" ? await ScenarioDisplay.loadHumanCopy() : {};
+    return (catalog.scenarios || catalog.presets || []).map((s) => {
+      const merged =
+        typeof ScenarioDisplay !== "undefined"
+          ? ScenarioDisplay.applyHumanCopy({ ...s, ...mapScenarioBase(s) }, copy)
+          : mapScenarioBase(s);
+      return {
+        ...mapScenarioBase(merged),
+        passCriteria: merged.passCriteria || merged.fieldLogExpect || [],
+        fieldLogExpect: merged.passCriteria || merged.fieldLogExpect || [],
+      };
+    });
   }
 
   let consoleEnv = sessionStorage.getItem(ENV_KEY) || "stage";
@@ -91,10 +111,11 @@
 
   async function findScenario(scenarioId) {
     const catalog = await getCatalog();
-    const scenarios = catalog.scenarios || catalog.presets || [];
+    const scenarios = await mapScenarioList(catalog);
     const scenario = scenarios.find((s) => s.id === scenarioId);
     if (!scenario) throw new Error("Unknown scenario: " + scenarioId);
-    return scenario;
+    const raw = (catalog.scenarios || catalog.presets || []).find((s) => s.id === scenarioId);
+    return { ...(raw || {}), ...scenario };
   }
 
   async function loadRunMeta(runId) {
@@ -124,7 +145,8 @@
     }
     if (path === "/api/scenarios/catalog") {
       const catalog = await getCatalog();
-      return { ok: true, catalog, scenarios: mapScenarioList(catalog) };
+      const scenarios = await mapScenarioList(catalog);
+      return { ok: true, catalog, scenarios };
     }
     if (path === "/api/scenarios/devices") {
       try {

@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "scenarios": {
+    "below-gate": {
+      "purpose": "Make sure the app stays quiet when nearby deals are not worth interrupting you.",
+      "summary": "4 shops with modest offers. Walk near them — you should not get a deal alert.",
+      "passCriteria": [
+        "The app treated nearby deals as too weak for an alert (or blocked one)",
+        "No deal alert actually fired"
+      ],
+      "playbook": [
+        { "step": 1, "who": "Phone", "do": "Turn deal alerts on. Leave all feed categories enabled.", "verify": "manual" },
+        { "step": 2, "who": "Setup", "do": "Set the walk centre on the map → Run scenario. You should see 4 shop pins (6 offers total).", "verify": "run_seeded" },
+        { "step": 3, "who": "Walk", "do": "Walk into the orange circle. Stand near a pin for at least 3 minutes.", "verify": "field_near_shop_dwell" },
+        { "step": 4, "who": "Phone", "do": "Pull the feed to refresh near the shops. Do not redeem.", "verify": "field_offers_seen" },
+        { "step": 5, "who": "Phone", "do": "Settings → Deal alert test log → Upload log.", "verify": "log_pasted" },
+        { "step": 6, "who": "Verify", "do": "On this page: Load cloud log → Check log. Must pass.", "verify": "field_log_rules" },
+        { "step": 7, "who": "Setup", "do": "Tap Finish & remove — only after the log check passes.", "verify": "run_removed" }
+      ],
+      "cleanupWhen": "After the log check passes, tap Finish & remove."
+    },
+    "walk-allow": {
+      "purpose": "Make sure a real walk near several good shops can qualify for a deal alert.",
+      "summary": "12 shops (coffee, food, fashion, beauty). Walk between pins and linger — the app should see enough value nearby.",
+      "passCriteria": [
+        "Nearby deals were strong enough together that the app would consider alerting you",
+        "You were walking or standing still — not driving past",
+        "No “you’re driving” block in the log"
+      ],
+      "playbook": [
+        { "step": 1, "who": "Phone", "do": "Turn deal alerts on. Location and notifications must stay allowed.", "verify": "manual" },
+        { "step": 2, "who": "Setup", "do": "Set the walk centre on the map → Run scenario.", "verify": "run_seeded" },
+        { "step": 3, "who": "Walk", "do": "Walk between pins (do not drive). Stay near a cluster for at least 5 minutes.", "verify": "field_near_shop_dwell" },
+        { "step": 4, "who": "Phone", "do": "Refresh the feed while walking. Upload the test log after a few minutes.", "verify": "log_pasted" },
+        { "step": 5, "who": "Verify", "do": "Load cloud log → Check log. Must pass.", "verify": "field_log_rules" },
+        { "step": 6, "who": "Setup", "do": "Tap Finish & remove — only after the log check passes.", "verify": "run_removed" }
+      ],
+      "cleanupWhen": "After the log check passes, tap Finish & remove."
+    },
+    "lunch-corridor": {
+      "purpose": "Lunch-time walk with mostly food and coffee shops — alerts should still work on a realistic corridor.",
+      "summary": "7 shops skewed to lunch (coffee + food). Midday walk near the pins.",
+      "passCriteria": [
+        "Enough interesting lunch deals nearby while you were on foot",
+        "Walking or standing — not driving",
+        "Normal alert path (not blocked as driving)"
+      ],
+      "playbook": [
+        { "step": 1, "who": "Phone", "do": "Deal alerts on. All categories enabled.", "verify": "manual" },
+        { "step": 2, "who": "Setup", "do": "Run scenario at your real lunch walk area.", "verify": "run_seeded" },
+        { "step": 3, "who": "Walk", "do": "Walk the corridor between pins. Dwell near food shops 5+ minutes.", "verify": "field_near_shop_dwell" },
+        { "step": 4, "who": "Phone", "do": "Refresh feed and upload test log.", "verify": "log_pasted" },
+        { "step": 5, "who": "Verify", "do": "Check log — pass required.", "verify": "field_log_rules" },
+        { "step": 6, "who": "Setup", "do": "Finish & remove after pass.", "verify": "run_removed" }
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "food-affinity-3day": {
+      "purpose": "After you redeem at a bakery three days in a row, day 4 walks should favour similar food offers.",
+      "summary": "Multi-day: bakery anchor + fillers. Redeem bakery days 1–3, walk day 4.",
+      "passCriteria": [
+        "Day 4 log shows food/coffee leaning after prior redeems",
+        "Document each day in notes when finishing the run"
+      ],
+      "cleanupWhen": "Only Finish & remove after all days in the playbook are done."
+    },
+    "category-off": {
+      "purpose": "If you turn Coffee off in settings, coffee shops must not drive alert copy.",
+      "summary": "5 coffee-heavy shops. Turn Coffee category off, then walk.",
+      "passCriteria": [
+        "Coffee offers excluded from alert reasoning",
+        "Non-coffee categories still behave normally"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "driving-suppress": {
+      "purpose": "Driving past many shops must not trigger walking-style deal alerts.",
+      "summary": "12 shops along a route. Drive through (do not walk).",
+      "passCriteria": [
+        "Activity shows driving or in_vehicle",
+        "No walking-style alert fired",
+        "Driving suppress rule recorded in log"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "walk-in-reenter": {
+      "purpose": "First visit can alert; leaving and coming back should follow the re-entry rules (INT-04).",
+      "summary": "4 shops in a ring. Walk in, leave, walk back in.",
+      "passCriteria": [
+        "First entry logged with offers seen",
+        "Re-entry behaviour matches spec (no duplicate spam)"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "blacklist-merchant": {
+      "purpose": "A shop you blocked must never appear in alerts or feed for that walk.",
+      "summary": "4 shops — one is blacklisted on the phone before the walk.",
+      "passCriteria": [
+        "Blacklisted shop absent from alert/feed evidence",
+        "Other shops still visible"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "transit-suppress": {
+      "purpose": "Train or transit movement must not trigger high-street walking alerts.",
+      "summary": "Shops near a rail corridor. Test on train or fast transit past pins.",
+      "passCriteria": [
+        "Transit or high-speed movement detected",
+        "No inappropriate walking alert"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "quiet-allow": {
+      "purpose": "Dense retail can use a quieter delivery path — still allow when rules say yes.",
+      "summary": "Many retail pins in a busy area. Walk and dwell normally.",
+      "passCriteria": [
+        "Allow or quiet path — not wrongly suppressed",
+        "On foot near shops"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "bootstrap-day3": {
+      "purpose": "Early app days: by day 3 lunch walk, engine should have enough signal for a sensible alert.",
+      "summary": "Multi-day bootstrap through day 3 lunch walk.",
+      "passCriteria": [
+        "Day 3 lunch walk log matches bootstrap expectations"
+      ],
+      "cleanupWhen": "Finish only after full multi-day playbook complete."
+    },
+    "bootstrap-handoff": {
+      "purpose": "Day 6 handoff — engine memory from prior days should still behave on a routine walk.",
+      "summary": "Multi-day bootstrap through day 6 handoff walk.",
+      "passCriteria": [
+        "Handoff day log shows stable memory behaviour"
+      ],
+      "cleanupWhen": "Finish only after full multi-day playbook complete."
+    },
+    "lunch-ignore-3day": {
+      "purpose": "Ignoring lunch alerts three days should reduce lunch noise on day 4.",
+      "summary": "Multi-day: ignore lunch pings days 1–3, walk day 4.",
+      "passCriteria": [
+        "Day 4 shows reduced or adjusted lunch alerting after ignores"
+      ],
+      "cleanupWhen": "Finish only after multi-day steps complete."
+    },
+    "parcel-run": {
+      "purpose": "Errand walk (parcel/post) with food nearby — serendipity without wrong intent.",
+      "summary": "Mixed errand + food pins. Walk the errand route.",
+      "passCriteria": [
+        "Errand context respected",
+        "Food opportunities handled per spec"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    },
+    "context-block-6h": {
+      "purpose": "Same café twice in one day — second visit within 6 hours should be context-blocked.",
+      "summary": "1 café anchor + fillers. Morning walk, same pin 6+ hours later.",
+      "passCriteria": [
+        "First visit logged",
+        "Repeat within block window suppressed appropriately"
+      ],
+      "cleanupWhen": "After log check passes, Finish & remove."
+    }
+  }
+}
