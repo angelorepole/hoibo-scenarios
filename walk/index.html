@@ -184,6 +184,10 @@
       white-space: nowrap;
     }
 
+    .device-pick label.device-always {
+      opacity: 0.92;
+    }
+
     .run-history {
       margin-top: 1rem;
       border-top: 1px solid var(--border);
@@ -216,6 +220,8 @@
     .run-history .tag.pass { border-color: var(--success); color: var(--success); }
     .run-history .tag.fail { border-color: var(--danger); color: var(--danger); }
     .run-history .tag.progress { border-color: var(--accent); color: var(--accent); }
+    .run-history .tag.stage { border-color: #3b82f6; color: #93c5fd; }
+    .run-history .tag.prod { border-color: #f59e0b; color: #fcd34d; }
 
     .env-strip {
       display: flex;
@@ -612,12 +618,13 @@
       <div class="status" id="status">Load presets…</div>
 
       <div class="run-history" id="run-history">
-        <h3 style="font-size:0.85rem;margin-bottom:0.5rem;">Run log</h3>
+        <h3 id="run-history-heading" style="font-size:0.85rem;margin-bottom:0.5rem;">Run log</h3>
         <p class="hint" id="run-history-empty">No runs yet.</p>
         <table id="run-history-table" hidden>
           <thead>
             <tr>
               <th>When</th>
+              <th>Env</th>
               <th>Scenario</th>
               <th>Devices</th>
               <th>Status</th>
@@ -697,6 +704,11 @@
     let lastPlaybook = { steps: [], expects: [], multiDay: false };
 
     const DEVICES_PICK_KEY = "walk_scenario_device_slots";
+    /** Locked in every run for this env — iPad on Stage, AR14 on Prod. */
+    const ALWAYS_ON_BY_ENV = {
+      stage: ["merchant-ipad"],
+      prod: ["ar14"],
+    };
 
     const el = (id) => document.getElementById(id);
 
@@ -741,12 +753,37 @@
       return registryDevices.filter((d) => slots.has(String(d.slot)));
     }
 
-    function savedDeviceSlots() {
+    function alwaysOnSlots() {
+      const locked = ALWAYS_ON_BY_ENV[consoleEnvSlug] || [];
+      const visible = new Set(devicesForPicker().map((d) => String(d.slot)));
+      return locked.filter((slot) => visible.has(String(slot)));
+    }
+
+    function devicePickStorageKey() {
+      return `${DEVICES_PICK_KEY}_${consoleEnvSlug}`;
+    }
+
+    function savedOptionalDeviceSlots() {
       try {
-        return JSON.parse(localStorage.getItem(DEVICES_PICK_KEY) || "[]");
+        const locked = new Set(alwaysOnSlots());
+        const raw = JSON.parse(localStorage.getItem(devicePickStorageKey()) || "[]");
+        return raw.filter((s) => !locked.has(String(s)));
       } catch (_) {
         return [];
       }
+    }
+
+    function persistOptionalDevicePick() {
+      const locked = new Set(alwaysOnSlots());
+      const slots = [...el("device-pick").querySelectorAll("input:checked")]
+        .map((i) => i.value)
+        .filter((s) => !locked.has(String(s)));
+      localStorage.setItem(devicePickStorageKey(), JSON.stringify(slots));
+    }
+
+    function resetOptionalDevicePick() {
+      localStorage.removeItem(devicePickStorageKey());
+      renderDevicePick();
     }
 
     function devicesForPicker() {
@@ -769,30 +806,43 @@
         hint.textContent = `Showing ${consoleEnvLabel} phones only — switch env for other lanes.`;
         return;
       }
-      const saved = new Set(savedDeviceSlots());
+      const locked = new Set(alwaysOnSlots());
+      const saved = new Set(savedOptionalDeviceSlots());
       box.innerHTML = visible
         .map((d) => {
           const roles = (d.roles || []).join(" + ") || "device";
-          const checked = saved.has(String(d.slot)) ? " checked" : "";
-          return `<label><input type="checkbox" value="${d.slot}" data-device-slot="${d.slot}"${checked} /><span>${d.name}<br /><span class="device-meta">${roles}</span></span></label>`;
+          const slot = String(d.slot);
+          const isLocked = locked.has(slot);
+          const checked = isLocked || saved.has(slot) ? " checked" : "";
+          const disabled = isLocked ? " disabled" : "";
+          const labelClass = isLocked ? ' class="device-always"' : "";
+          return `<label${labelClass}><input type="checkbox" value="${d.slot}" data-device-slot="${d.slot}"${checked}${disabled} /><span>${d.name}<br /><span class="device-meta">${roles}${isLocked ? " · always in run" : ""}</span></span></label>`;
         })
         .join("");
-      hint.textContent = `Showing ${consoleEnvLabel} phones only — switch env for other lanes. Saved in run log.`;
-      box.querySelectorAll("input").forEach((input) => {
+      const alwaysName =
+        consoleEnvSlug === "prod"
+          ? "AR14 is always in Prod runs."
+          : "iPad is always in Stage runs (merchant).";
+      hint.textContent = `${alwaysName} Tick customer phone(s) you reinstalled for this run. Saved in run log.`;
+      box.querySelectorAll("input:not(:disabled)").forEach((input) => {
         input.onchange = () => {
-          const slots = [...box.querySelectorAll("input:checked")].map((i) => i.value);
-          localStorage.setItem(DEVICES_PICK_KEY, JSON.stringify(slots));
+          persistOptionalDevicePick();
           syncRunDevices();
         };
       });
     }
 
     function applyRunDevicesToPick(devices) {
-      if (!devices?.length) return;
-      const slots = new Set(devices.map((d) => String(d.slot)));
+      const locked = new Set(alwaysOnSlots());
+      const slots = new Set((devices || []).map((d) => String(d.slot)));
+      locked.forEach((s) => slots.add(String(s)));
       el("device-pick").querySelectorAll("input").forEach((input) => {
         input.checked = slots.has(input.value);
       });
+      localStorage.setItem(
+        devicePickStorageKey(),
+        JSON.stringify([...slots].filter((s) => !locked.has(String(s)))),
+      );
     }
 
     async function syncRunDevices() {
@@ -809,16 +859,35 @@
       }
     }
 
+    function envTag(env) {
+      const slug = String(env || "stage").toLowerCase();
+      const label = slug.toUpperCase();
+      return `<span class="tag ${slug === "prod" ? "prod" : "stage"}">${label}</span>`;
+    }
+
+    function historyRowsForEnv(rows) {
+      return (rows || []).filter(
+        (r) => String(r.console_env || "stage").toLowerCase() === consoleEnvSlug,
+      );
+    }
+
+    function updateRunHistoryHeading() {
+      el("run-history-heading").textContent = `Run log — ${consoleEnvLabel}`;
+    }
+
     async function loadRunHistory() {
+      const empty = el("run-history-empty");
+      const table = el("run-history-table");
+      const body = el("run-history-body");
+      updateRunHistoryHeading();
+      body.innerHTML = "";
+      table.hidden = true;
       try {
         const data = await api("/api/scenarios/history");
-        const rows = data.history || [];
-        const empty = el("run-history-empty");
-        const table = el("run-history-table");
-        const body = el("run-history-body");
+        const rows = historyRowsForEnv(data.history || data.runs || []);
         if (!rows.length) {
           empty.hidden = false;
-          table.hidden = true;
+          empty.textContent = `No runs on ${consoleEnvLabel} yet.`;
           return;
         }
         empty.hidden = true;
@@ -829,8 +898,10 @@
             const dur = formatDuration(r.duration_seconds);
             const when = `${formatWhen(r.started_at)}${dur ? ` · ${dur}` : ""}`;
             const label = r.scenario_label || r.scenario_id || "—";
+            const runEnv = String(r.console_env || consoleEnvSlug).toLowerCase();
             return `<tr>
-              <td>${when}<br /><span class="hint">${r.console_env || ""} ${r.short_id || ""}</span></td>
+              <td>${when}<br /><span class="hint">${r.short_id || (r.run_id || "").slice(0, 8)}</span></td>
+              <td>${envTag(runEnv)}</td>
               <td>${label}</td>
               <td>${deviceNames(r.devices)}</td>
               <td>${statusTag(r)}</td>
@@ -838,7 +909,8 @@
           })
           .join("");
       } catch (_) {
-        /* history optional if server old */
+        empty.hidden = false;
+        empty.textContent = `Could not load run log for ${consoleEnvLabel}.`;
       }
     }
 
@@ -887,7 +959,9 @@
         hint.textContent =
           `Run ${currentRun.short_id} is live on ${env}. Run again to replace, or Remove when playbook PASS.`;
       } else {
-        hint.hidden = true;
+        hint.hidden = false;
+        hint.textContent =
+          "Before Run: fresh app install on ticked phones (Mac → refresh-stage-phones.sh or prod install). Run wipes the cloud DB only — not on-device memory.";
       }
     }
     const statusEl = el("status");
@@ -1051,6 +1125,14 @@
     }
 
     function showRun(run) {
+      const runEnv = String(run?.console_env || consoleEnvSlug).toLowerCase();
+      if (runEnv !== consoleEnvSlug) {
+        setStatus(
+          `That run is on ${runEnv.toUpperCase()} — switch console to ${runEnv.toUpperCase()} to load it.`,
+          false,
+        );
+        return;
+      }
       currentRun = run;
       clearShopMarkers();
 
@@ -1408,7 +1490,10 @@
           ? `On map after Run: ${p.seedLine}`
           : "";
         renderPlaybook(p.playbook || [], p.fieldLogExpect || [], p.multiDay);
-        if (!currentRun) updateCleanupHint(null);
+        if (!currentRun) {
+          resetOptionalDevicePick();
+          updateCleanupHint(null);
+        }
         refreshPlaybookStatus();
       };
       renderPresetOptions();
@@ -1440,6 +1525,7 @@
         setStatus("PROD run cancelled.", false);
         return;
       }
+      renderDevicePick();
       const body = {
         preset_id: el("preset").value,
         lat: parseFloat(el("lat").value),
