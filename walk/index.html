@@ -649,8 +649,8 @@
       <div class="modal-body">
         <div class="workflow-note mb-3">
           <strong>After your walk:</strong><br />
-          <strong>Phone:</strong> Settings → <em>Deal alert test log</em> → <strong>Upload log</strong> (cloud).<br />
-          <strong>Mac:</strong> pick phone below → <em>Load cloud log</em>, or paste JSON → <em>Check log</em>.
+          <strong>Phone:</strong> Settings → <em>Deal alert test log</em> → <strong>Upload log</strong>.<br />
+          Then <em>Load cloud log</em> here (Mac: <em>Check log</em> marks pass/fail against the playbook).
         </div>
         <div class="log-check mt-0 mb-0" id="log-check" style="border: none; background: transparent; padding: 0;">
           <label for="log-phone" class="form-label">Phone (cloud upload)</label>
@@ -932,9 +932,9 @@
         return;
       }
       runBtn.textContent = currentRun
-        ? `Replace scenario on ${env} (wipes current)`
+        ? "Finish current run first"
         : `Run scenario on ${env} (wipes prior WALK·)`;
-      runBtn.disabled = !hasCenter;
+      runBtn.disabled = !hasCenter || !!currentRun;
       cleanupBtn.disabled = !currentRun;
       if (abandonBtn) {
         abandonBtn.hidden = !currentRun;
@@ -946,7 +946,7 @@
       } else if (currentRun) {
         hint.hidden = false;
         hint.textContent =
-          `Run ${currentRun.short_id} is live on ${env}. Run again to replace, or Remove when playbook PASS.`;
+          `Run ${currentRun.short_id} is live. Follow the playbook, then Finish & remove (or Abandon). You cannot start another until this one is closed.`;
       } else {
         hint.hidden = false;
         hint.textContent =
@@ -1501,14 +1501,12 @@
         setStatus("Set centre pin first — tap map or GPS.", false);
         return;
       }
-      if (currentRun?.multi_day) {
-        const ok = confirm(
-          "This is a multi-day run. Replacing it will delete seeded shops and break WALK-04 style tests. Continue?"
+      if (currentRun) {
+        setStatus(
+          `Run ${currentRun.short_id} is still open. Finish & remove (or Abandon) before starting a new scenario.`,
+          false,
         );
-        if (!ok) return;
-      } else if (currentRun) {
-        const ok = confirm(`Replace run ${currentRun.short_id} on ${consoleEnvLabel}?`);
-        if (!ok) return;
+        return;
       }
       if (!prodRunConfirmed()) {
         setStatus("PROD run cancelled.", false);
@@ -1548,23 +1546,31 @@
       }
     }
 
-    async function loadActiveRun() {
+    async function tryLoadActiveRun({ silent = false } = {}) {
       try {
         const data = await api("/api/scenarios/runs");
         const runs = data.runs || [];
         if (!runs.length) {
-          setStatus(`No in-progress run on ${consoleEnvLabel}. Run a scenario or check Run log.`, false);
-          return;
+          if (!silent) {
+            setStatus(`No in-progress run on ${consoleEnvLabel}. Run a scenario or check Run log.`, false);
+          }
+          return false;
         }
         const pick = runs[0];
         const full = await api(`/api/scenarios/run/${pick.run_id}`);
         showRun(full.run);
-        if (runs.length > 1) {
+        if (runs.length > 1 && !silent) {
           setStatus(`Loaded newest active run ${pick.run_id.slice(0, 8)} (${runs.length} active on ${consoleEnvLabel}).`, true);
         }
+        return true;
       } catch (e) {
-        setStatus(String(e.message || e), false);
+        if (!silent) setStatus(String(e.message || e), false);
+        return false;
       }
+    }
+
+    async function loadActiveRun() {
+      await tryLoadActiveRun({ silent: false });
     }
 
     async function setConsoleTarget(target) {
@@ -1584,7 +1590,13 @@
       el("redeem-phone-block").hidden = true;
       updateRunButtons();
       await loadRunHistory();
-      setStatus(`Console target → ${consoleEnvLabel}. Map cleared — load active run or Run scenario.`, true);
+      const loaded = await tryLoadActiveRun({ silent: true });
+      setStatus(
+        loaded
+          ? `Console target → ${consoleEnvLabel}. Active run loaded.`
+          : `Console target → ${consoleEnvLabel}. No active run — pick scenario and Run.`,
+        true,
+      );
     }
 
     function renderWalkEnv(envRes) {
@@ -1837,9 +1849,10 @@
           setCenter(c.lat, c.lng);
         }
 
-        setStatus(`Pick scenario → set centre → Run on ${consoleEnvLabel}. Map empty until you run or Load active run.`);
+        setStatus(`Pick scenario → set centre → Run on ${consoleEnvLabel}.`, true);
         updateRunButtons();
         await loadRunHistory();
+        await tryLoadActiveRun({ silent: true });
         refreshMapSize();
       } catch (e) {
         setStatus(String(e.message || e), false);
