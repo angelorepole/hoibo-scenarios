@@ -220,8 +220,6 @@
     .run-history .tag.pass { border-color: var(--success); color: var(--success); }
     .run-history .tag.fail { border-color: var(--danger); color: var(--danger); }
     .run-history .tag.progress { border-color: var(--accent); color: var(--accent); }
-    .run-history .tag.stage { border-color: #3b82f6; color: #93c5fd; }
-    .run-history .tag.prod { border-color: #f59e0b; color: #fcd34d; }
 
     .env-strip {
       display: flex;
@@ -624,7 +622,6 @@
           <thead>
             <tr>
               <th>When</th>
-              <th>Env</th>
               <th>Scenario</th>
               <th>Devices</th>
               <th>Status</th>
@@ -859,12 +856,6 @@
       }
     }
 
-    function envTag(env) {
-      const slug = String(env || "stage").toLowerCase();
-      const label = slug.toUpperCase();
-      return `<span class="tag ${slug === "prod" ? "prod" : "stage"}">${label}</span>`;
-    }
-
     function historyRowsForEnv(rows) {
       return (rows || []).filter(
         (r) => String(r.console_env || "stage").toLowerCase() === consoleEnvSlug,
@@ -898,10 +889,8 @@
             const dur = formatDuration(r.duration_seconds);
             const when = `${formatWhen(r.started_at)}${dur ? ` · ${dur}` : ""}`;
             const label = r.scenario_label || r.scenario_id || "—";
-            const runEnv = String(r.console_env || consoleEnvSlug).toLowerCase();
             return `<tr>
               <td>${when}<br /><span class="hint">${r.short_id || (r.run_id || "").slice(0, 8)}</span></td>
-              <td>${envTag(runEnv)}</td>
               <td>${label}</td>
               <td>${deviceNames(r.devices)}</td>
               <td>${statusTag(r)}</td>
