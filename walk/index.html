@@ -28,7 +28,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260607102518" />
+  <meta name="walk-build" content="20260607103009" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
@@ -193,6 +193,21 @@
     .phone-row .phone-warn {
       color: #f0a0a0;
       font-size: 0.72rem;
+    }
+
+    .phone-row-locked input:disabled {
+      opacity: 1;
+      cursor: default;
+    }
+
+    .phone-row-locked .phone-locked-tag {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .status:empty,
+    .status.idle {
+      display: none;
     }
 
     .device-pick {
@@ -1043,14 +1058,17 @@
       const locked = new Set(alwaysOnSlots());
       const saved = new Set(savedOptionalDeviceSlots());
       const prep = loadPhonePrepState();
+      locked.forEach((slot) => {
+        prep[slot] = true;
+      });
+      savePhonePrepState(prep);
       box.innerHTML = visible
         .map((d) => {
           const slot = String(d.slot);
           const isLocked = locked.has(slot);
           const warn = phonePrepStatusHtml(slot);
           if (isLocked) {
-            const checked = prep[slot] ? " checked" : "";
-            return `<label class="phone-row phone-row-locked"><input type="checkbox" data-phone-prep="${slot}"${checked} /><span>${d.name}${warn ? `<br />${warn}` : ""}</span></label>`;
+            return `<label class="phone-row phone-row-locked"><input type="checkbox" checked disabled aria-label="${d.name} always in run" /><span>${d.name} <span class="phone-locked-tag">· always in run</span>${warn ? `<br />${warn}` : ""}</span></label>`;
           }
           const checked = saved.has(slot) ? " checked" : "";
           return `<label class="phone-row"><input type="checkbox" data-phone-slot="${slot}" value="${slot}"${checked} /><span>${d.name}${warn ? `<br />${warn}` : ""}</span></label>`;
@@ -1059,12 +1077,6 @@
       if (hint) {
         hint.hidden = false;
       }
-      box.querySelectorAll("input[data-phone-prep]").forEach((inp) => {
-        inp.onchange = () => {
-          setPhonePrep(inp.dataset.phonePrep, inp.checked);
-          updateRunButtons();
-        };
-      });
       box.querySelectorAll("input[data-phone-slot]").forEach((inp) => {
         inp.onchange = () => {
           persistOptionalDevicePick();
@@ -1073,49 +1085,15 @@
           updateRunButtons();
         };
       });
-      if (deviceBuildState?.ok) {
-        let changed = false;
-        selectedDeviceSlotsForPrep().forEach((slot) => {
-          const hit = deviceBuildStatusForSlot(slot);
-          if (hit?.installed && !hit.behind && !hit.missing) {
-            if (!prep[slot]) {
-              prep[slot] = true;
-              changed = true;
-            }
-          }
-        });
-        if (changed) {
-          savePhonePrepState(prep);
-          box.querySelectorAll("input[data-phone-prep]").forEach((inp) => {
-            if (prep[inp.dataset.phonePrep]) inp.checked = true;
-          });
-          box.querySelectorAll("input[data-phone-slot]").forEach((inp) => {
-            if (prep[inp.value]) inp.checked = inp.checked || prep[inp.value];
-          });
-        }
-      }
+      // Sync prep checkboxes for optional phones already ticked
+      box.querySelectorAll("input[data-phone-slot]:checked").forEach((inp) => {
+        setPhonePrep(inp.value, true);
+      });
     }
 
     function phonesReadyForRun() {
-      const slots = selectedDeviceSlotsForPrep();
-      if (!slots.length) {
+      if (!selectedDevices().length) {
         return { ok: false, reason: "Tick at least one phone." };
-      }
-      const state = loadPhonePrepState();
-      if (!slots.every((s) => state[s])) {
-        return { ok: false, reason: "Confirm each ticked phone has a fresh install." };
-      }
-      if (deviceBuildState?.ok) {
-        for (const slot of slots) {
-          const hit = deviceBuildStatusForSlot(slot);
-          if (hit?.configured && (hit.missing || hit.behind || !hit.installed)) {
-            const name = registryDevices.find((d) => d.slot === slot)?.name || slot;
-            return {
-              ok: false,
-              reason: `${name} needs a fresh install in Real iPhones.`,
-            };
-          }
-        }
       }
       return { ok: true };
     }
@@ -1198,9 +1176,10 @@
             </tr>`;
           })
           .join("");
-      } catch (_) {
+      } catch (e) {
         empty.hidden = false;
         empty.textContent = `Could not load run log for ${consoleEnvLabel}.`;
+        setStatus(String(e.message || e), false);
       }
     }
 
@@ -1381,13 +1360,18 @@
         hint.hidden = false;
         const prep = phonesReadyForRun();
         hint.textContent = prep.ok
-          ? `Phones ready — Run seeds test shops on ${env}.`
+          ? `Ready — Run seeds test shops on ${env}.`
           : prep.reason;
       }
       updateRunUiMode();
     }
 
     function setStatus(msg, ok) {
+      if (!msg) {
+        statusEl.textContent = "";
+        statusEl.className = "status idle";
+        return;
+      }
       statusEl.textContent = msg;
       statusEl.className = "status" + (ok === true ? " ok" : ok === false ? " err" : "");
     }
@@ -2442,14 +2426,7 @@
           }
         }
 
-        setStatus(
-          canControlRuns()
-            ? `Pick scenario → prepare phones → Run on ${consoleEnvLabel}.`
-            : loadedActive
-              ? `Active run on ${consoleEnvLabel} — follow playbook, check logs. Finish on Mac.`
-              : `No active run on ${consoleEnvLabel}. Start from Mac Dev Console.`,
-          true,
-        );
+        setStatus("");
         updateRunButtons();
         await loadRunHistory();
         refreshMapSize();
