@@ -144,6 +144,7 @@
     }
     const macOnlyPaths =
       (path === "/api/scenarios/run" && (method === "POST" || method === "PATCH")) ||
+      (path === "/api/scenarios/prepare-devices" && method === "POST") ||
       (path === "/api/scenarios/abandon" && method === "POST") ||
       (path === "/api/scenarios/cleanup" && method === "POST") ||
       (path === "/api/scenarios/redeem" && method === "POST");
@@ -222,7 +223,10 @@
       }
       const scenario = await findScenario(String(scenarioId));
       const runMeta = body.run_id ? await loadRunMeta(String(body.run_id)) : null;
-      const result = globalThis.ScenarioFieldLog.analyzeFieldLog(scenario, log, runMeta);
+      const result = globalThis.ScenarioFieldLog.analyzeFieldLog(scenario, log, runMeta, {
+        uploadScenarioId: body.upload_scenario_id || body.log_scenario_id,
+        uploadRunId: body.upload_run_id || body.log_run_id,
+      });
       const playbookSteps = globalThis.ScenarioPlaybook
         ? globalThis.ScenarioPlaybook.evaluatePlaybook(scenario, {
             runMeta,

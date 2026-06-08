@@ -114,13 +114,79 @@ ${logJson}
 Be concise. Plain English.`;
   }
 
-  function analyzeFieldLog(scenario, log, runMeta) {
+  function runIdsMatch(expected, uploaded) {
+    const exp = String(expected || "").trim();
+    const up = String(uploaded || "").trim();
+    if (!exp || !up) return false;
+    if (exp === up) return true;
+    const expShort = exp.split("-")[0];
+    const upShort = up.split("-")[0];
+    return up === expShort || exp === upShort || expShort === upShort;
+  }
+
+  function syncChecks(scenarioId, runMeta, uploadScenarioId, uploadRunId) {
+    if (!runMeta?.run_id) return [];
+    const expectedRun = String(runMeta.run_id).trim();
+    const expectedShort = String(runMeta.short_id || expectedRun.split("-")[0]);
+    const expectedScenario = String(
+      runMeta.scenario_id || runMeta.preset_id || scenarioId,
+    ).trim();
+    const checks = [];
+    const uploadRun = String(uploadRunId || "").trim();
+    if (!uploadRun) {
+      checks.push({
+        id: "run_sync",
+        pass: false,
+        detail: `Log has no run id — phone field log should show ${expectedShort}. Wrong build or stale app.`,
+      });
+    } else if (!runIdsMatch(expectedRun, uploadRun)) {
+      checks.push({
+        id: "run_sync",
+        pass: false,
+        detail: `Run id mismatch — console ${expectedShort}, log ${uploadRun.split("-")[0]}`,
+      });
+    } else {
+      checks.push({
+        id: "run_sync",
+        pass: true,
+        detail: `Run id matches console (${expectedShort})`,
+      });
+    }
+    const uploadScenario = String(uploadScenarioId || "").trim();
+    if (uploadScenario && uploadScenario !== expectedScenario) {
+      checks.push({
+        id: "scenario_sync",
+        pass: false,
+        detail: `Scenario mismatch — console ${expectedScenario}, log ${uploadScenario}`,
+      });
+    } else if (uploadScenario) {
+      checks.push({
+        id: "scenario_sync",
+        pass: true,
+        detail: `Scenario matches console (${expectedScenario})`,
+      });
+    }
+    return checks;
+  }
+
+  function analyzeFieldLog(scenario, log, runMeta, options) {
     if (!scenario?.id) throw new Error("scenario required");
+    const opts = options || {};
     const entries = parseFieldLog(log);
     const rules = scenario.fieldLogRules || {};
     const minEntries = Number(rules.minEntries ?? 1);
     const checks = [];
     let failed = false;
+
+    for (const sync of syncChecks(
+      scenario.id,
+      runMeta,
+      opts.uploadScenarioId,
+      opts.uploadRunId,
+    )) {
+      checks.push(sync);
+      if (sync.pass === false) failed = true;
+    }
 
     if (entries.length < minEntries) {
       checks.push({

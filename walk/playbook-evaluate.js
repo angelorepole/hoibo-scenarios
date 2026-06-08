@@ -44,25 +44,25 @@
   function checkFieldNearShopDwell(entries, shops) {
     const near = entriesNearShops(entries, shops, NEAR_SHOP_M);
     if (!near.length) {
-      return { pass: false, detail: `No log entry within ${NEAR_SHOP_M} m of a seeded shop pin` };
+      return {
+        pass: false,
+        detail: `Log does not show you near a shop — stand within ${NEAR_SHOP_M} m of a pin for ${Math.floor(DWELL_SECONDS / 60)}+ minutes, then upload log again`,
+      };
     }
     const walking = near.filter((e) => WALK_ACTIVITIES.has(e.activity || "unknown"));
     if (!walking.length) {
-      return { pass: false, detail: "Near a shop but activity not walking/stationary" };
+      return { pass: false, detail: "Log shows driving or wrong movement — walk or stand still near the pin" };
     }
     const times = walking.map((e) => parseAt(e.at)).filter(Boolean);
     if (times.length >= 2) {
       const span = Math.abs((Math.max(...times.map(Number)) - Math.min(...times.map(Number))) / 1000);
       if (span >= DWELL_SECONDS) {
-        return {
-          pass: true,
-          detail: `On foot near shop ≥${Math.floor(DWELL_SECONDS / 60)} min (${Math.floor(span)}s span in log)`,
-        };
+        return { pass: true, detail: "" };
       }
     }
     return {
       pass: false,
-      detail: `Near shop on foot — need ≥${Math.floor(DWELL_SECONDS / 60)} min between log entries (keep app open / walk-test build running)`,
+      detail: `Stay near the pin longer (${Math.floor(DWELL_SECONDS / 60)}+ minutes, app open), then upload log again`,
     };
   }
 
@@ -70,10 +70,9 @@
     const near = entriesNearShops(entries, shops, NEAR_SHOP_M);
     const withOffers = near.filter((e) => Number(e.offerCount || 0) > 0);
     if (withOffers.length) {
-      const maxCount = Math.max(...withOffers.map((e) => Number(e.offerCount || 0)));
-      return { pass: true, detail: `Engine saw offers nearby (max offerCount ${maxCount})` };
+      return { pass: true, detail: "" };
     }
-    return { pass: false, detail: "No nearby log entry with offerCount > 0 — refresh feed near a pin" };
+    return { pass: false, detail: "Pull the feed while near a shop, then upload log again" };
   }
 
   function evaluatePlaybook(scenario, { runMeta, log, runActive, fieldLogOk } = {}) {
@@ -101,7 +100,7 @@
         do: step.do || "",
         verify,
         status: "manual",
-        detail: "Confirm on phone — not in field log",
+        detail: "",
       };
 
       if (verify === "manual") return row;
@@ -109,34 +108,34 @@
       if (verify === "run_seeded") {
         const ok = Boolean(runMeta && shops.length);
         row.status = ok ? "pass" : "pending";
-        row.detail = ok ? "Scenario seeded" : "Run scenario first";
+        row.detail = ok ? "" : "Tap Run scenario";
         return row;
       }
 
       if (verify === "run_removed") {
         const ok = runActive === false;
         row.status = ok ? "pass" : "pending";
-        row.detail = ok ? "Removed from env" : "Still active — remove when playbook done";
+        row.detail = ok ? "" : "Tap Finish & remove";
         return row;
       }
 
       if (verify === "log_pasted") {
         const ok = entries.length > 0;
         row.status = ok ? "pass" : "pending";
-        row.detail = ok ? `${entries.length} log entries loaded` : "Load or paste field log JSON";
+        row.detail = ok ? "" : "Add Phone Log (top right)";
         return row;
       }
 
       if (verify === "field_log_rules") {
         if (!entries.length) {
           row.status = "pending";
-          row.detail = "Load log → Check log";
+          row.detail = "";
         } else if (analysisOk === true) {
           row.status = "pass";
-          row.detail = "Automated field log rules passed";
+          row.detail = "";
         } else if (analysisOk === false) {
           row.status = "fail";
-          row.detail = "Field log rules failed — see Check log";
+          row.detail = "Log check failed — read results above";
         } else {
           row.status = "pending";
           row.detail = "Tap Check log";
@@ -144,9 +143,15 @@
         return row;
       }
 
-      if (!entries.length || !shops.length) {
+      if (!shops.length) {
         row.status = "pending";
-        row.detail = "Needs field log + active run on map";
+        row.detail = "Tap Run scenario first";
+        return row;
+      }
+
+      if (!entries.length) {
+        row.status = "pending";
+        row.detail = "";
         return row;
       }
 

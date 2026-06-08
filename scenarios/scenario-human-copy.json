@@ -9,9 +9,9 @@
         "No deal alert actually fired"
       ],
       "playbook": [
-        { "step": 1, "who": "Phone", "do": "Turn deal alerts on. Leave all feed categories enabled.", "verify": "manual" },
+        { "step": 1, "who": "Phone", "do": "Run scenario on Mac — phones fresh-install automatically (walk-test + field log). Deal alerts ON. All categories enabled.", "verify": "manual" },
         { "step": 2, "who": "Setup", "do": "Set the walk centre on the map → Run scenario. You should see 4 shop pins (6 offers total).", "verify": "run_seeded" },
-        { "step": 3, "who": "Walk", "do": "Walk into the orange circle. Stand near a pin for at least 3 minutes.", "verify": "field_near_shop_dwell" },
+        { "step": 3, "who": "Walk", "do": "Enter the orange circle. Stand near a pin for at least 3 minutes.", "verify": "field_near_shop_dwell" },
         { "step": 4, "who": "Phone", "do": "Pull the feed to refresh near the shops. Do not redeem.", "verify": "field_offers_seen" },
         { "step": 5, "who": "Phone", "do": "Settings → Deal alert test log → Upload log.", "verify": "log_pasted" },
         { "step": 6, "who": "Verify", "do": "On this page: Load cloud log → Check log. Must pass.", "verify": "field_log_rules" },

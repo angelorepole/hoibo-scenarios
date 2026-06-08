@@ -34,7 +34,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260607110228" />
+  <meta name="walk-build" content="20260608084754" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
@@ -214,6 +214,31 @@
     .status:empty,
     .status.idle {
       display: none;
+    }
+
+    .status.running {
+      display: block;
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .run-progress {
+      margin-top: 0.75rem;
+      padding: 0.75rem 0.85rem;
+      border-radius: var(--radius);
+      background: rgba(255, 140, 0, 0.1);
+      border: 1px solid var(--accent);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .run-progress[hidden] {
+      display: none !important;
+    }
+
+    .run-progress strong {
+      display: block;
+      margin-bottom: 0.25rem;
     }
 
     .device-pick {
@@ -855,7 +880,7 @@
         </div>
 
         <label class="form-label">Phones</label>
-        <p class="hint mb-1" id="phones-hint">Fresh install in <a href="http://127.0.0.1:8765/" target="_blank" rel="noopener noreferrer">Real iPhones</a>, then tick each phone in this test.</p>
+        <p class="hint mb-1" id="phones-hint">Run always fresh-installs ticked phones: customer = walk-test build (field log on), merchant = merchant app.</p>
         <div class="phone-rows" id="phone-rows">
           <p class="hint mb-0">Loading…</p>
         </div>
@@ -876,6 +901,11 @@
         <button type="button" class="btn btn-danger" id="btn-cleanup" disabled>Finish &amp; remove</button>
         <button type="button" class="btn btn-secondary" id="btn-abandon" disabled hidden>Abandon run</button>
         <p class="hint" id="cleanup-hint"></p>
+      </div>
+
+      <div class="run-progress" id="run-progress" hidden>
+        <strong id="run-progress-title">Resetting phones…</strong>
+        <span id="run-progress-text"></span>
       </div>
 
       <div class="status idle" id="status"></div>
@@ -1010,7 +1040,9 @@
     let hasCenter = false;
     let suppressNextClick = false;
     let lastAnalysis = null;
+    let lastCloudLogMeta = { scenario_id: null, run_id: null };
     let isSeeding = false;
+    let runProgressLabel = "";
     let playbookProgress = [];
     let lastPlaybook = { steps: [], expects: [], multiDay: false };
 
@@ -1424,7 +1456,9 @@
         const devices = deviceNames(currentRun.devices);
         el("active-run-meta").innerHTML =
           `<span class="run-id">${currentRun.short_id || (currentRun.run_id || "").slice(0, 8)}</span>` +
-          ` · ${consoleEnvLabel} · ${devices}<br />Centre ${centre} · ${currentRun.radius_m || radiusM} m`;
+          ` · ${consoleEnvLabel} · ${devices}<br />` +
+          `Phone field log should show run <strong>${currentRun.short_id || (currentRun.run_id || "").slice(0, 8)}</strong>` +
+          `<br />Centre ${centre} · ${currentRun.radius_m || radiusM} m`;
       }
 
       const mapHint = el("map-hint");
@@ -1460,16 +1494,22 @@
       }
       if (isSeeding) {
         runBtn.disabled = true;
-        runBtn.textContent = `Seeding ${env}…`;
+        runBtn.textContent = `Resetting phones…`;
         cleanupBtn.disabled = true;
         if (abandonBtn) abandonBtn.disabled = true;
         hint.hidden = false;
-        hint.textContent = `Wait — wiping prior WALK· data, then writing merchants to ${env}.`;
+        const names = runProgressLabel || "selected phones";
+        hint.textContent = `Wiping apps and reinstalling walk-test build on: ${names}. Then seeding ${env}.`;
+        setRunProgress(
+          `${names} — delete old app, install fresh walk-test build (Deal alert test log). Builds can take several minutes. Do not lock the phones.`,
+          "Step 1 — Reset phones (fresh install)",
+        );
         return;
       }
+      clearRunProgress();
       runBtn.textContent = currentRun
         ? "Finish current run first"
-        : `Run scenario on ${env} (wipes prior WALK·)`;
+        : `Run scenario on ${env}`;
       runBtn.disabled = !hasCenter || !!currentRun || !phonesReadyForRun().ok;
       cleanupBtn.disabled = !currentRun;
       if (abandonBtn) {
@@ -1487,10 +1527,28 @@
         hint.hidden = false;
         const prep = phonesReadyForRun();
         hint.textContent = prep.ok
-          ? `Ready — Run seeds test shops on ${env}.`
+          ? `Ready — Run fresh-installs ticked phones (walk-test + field log), then seeds ${env}.`
           : prep.reason;
       }
       updateRunUiMode();
+    }
+
+    function setRunProgress(msg, title) {
+      const box = el("run-progress");
+      const text = el("run-progress-text");
+      const heading = el("run-progress-title");
+      if (box) box.hidden = false;
+      if (heading) heading.textContent = title || "Resetting phones…";
+      if (text) text.textContent = msg;
+      if (statusEl) {
+        statusEl.textContent = msg;
+        statusEl.className = "status running";
+      }
+    }
+
+    function clearRunProgress() {
+      const box = el("run-progress");
+      if (box) box.hidden = true;
     }
 
     function setStatus(msg, ok) {
@@ -1798,9 +1856,10 @@
         const li = document.createElement("li");
         const prog = byStep[String(s.step)];
         const mark = prog ? stepMark(prog.status) : stepMark(s.verify === "manual" ? "manual" : "pending");
-        const detail = prog?.detail && prog.verify !== "manual"
-          ? `<span class="step-detail">${prog.detail}</span>`
-          : (s.verify === "manual" ? '<span class="step-detail">Phone only — confirm yourself</span>' : "");
+        const detail =
+          prog?.detail && prog.status !== "pass" && prog.verify !== "manual"
+            ? `<span class="step-detail">${prog.detail}</span>`
+            : "";
         li.innerHTML = `${mark}<span class="who">${s.who || "Step"}</span> — ${s.do}${detail}`;
         ol.appendChild(li);
       });
@@ -2029,6 +2088,10 @@
         const entries = full.entries || full.document?.entries || [];
         el("log-json").value = JSON.stringify(entries, null, 2);
         const doc = full.document || {};
+        lastCloudLogMeta = {
+          scenario_id: doc.scenario_id || null,
+          run_id: doc.run_id || null,
+        };
         if (doc.scenario_id && !currentRun) {
           const catSel = el("category");
           const presetSel = el("preset");
@@ -2041,7 +2104,8 @@
           }
         }
         if (statusEl) {
-          statusEl.textContent = `Loaded ${entries.length} entries · ${doc.uploaded_at || latest.path}`;
+          const sync = doc.run_id ? ` · run ${String(doc.run_id).slice(0, 8)}` : "";
+          statusEl.textContent = `Loaded ${entries.length} entries${sync} · ${doc.uploaded_at || latest.path}`;
         }
         refreshPlaybookStatus();
       } catch (e) {
@@ -2193,35 +2257,53 @@
         return;
       }
       renderDevicePick();
+      const deviceList = selectedDevices();
+      runProgressLabel = deviceList.map((d) => d.name || d.slot).join(", ");
       const body = {
         preset_id: el("preset").value,
         lat: parseFloat(el("lat").value),
         lng: parseFloat(el("lng").value),
         radius_m: radiusM,
         confirm_prod: consoleEnvLabel === "PROD",
-        devices: selectedDevices(),
+        devices: deviceList,
       };
       isSeeding = true;
       updateRunButtons();
-      setStatus(`Wiping prior WALK· on ${consoleEnvLabel}, then seeding…`);
       try {
+        setRunProgress(
+          `${runProgressLabel} — delete old app, install fresh walk-test build (Deal alert test log). Then wipe WALK· shops and seed on ${consoleEnvLabel}. This can take several minutes — keep phones unlocked.`,
+          "Step 1 — Reset phones (fresh install)",
+        );
         const data = await api("/api/scenarios/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
         showRun(data.run);
+        const prepNames = (data.devicePrep?.devices || []).join(", ");
+        const prepOk = data.devicePrep?.ok === true;
+        const runCode =
+          data.run?.short_id ||
+          data.devicePrep?.run_short_id ||
+          (data.run?.run_id || "").slice(0, 8);
         const wiped = data.prep?.wiped_runs?.length || 0;
-        setStatus(
-          wiped
-            ? `Seeded on ${consoleEnvLabel} (replaced ${wiped} prior run${wiped === 1 ? "" : "s"}).`
-            : `Seeded on ${consoleEnvLabel}.`,
-          true
-        );
+        const seedPart = wiped
+          ? `Seeded on ${consoleEnvLabel} (replaced ${wiped} prior run${wiped === 1 ? "" : "s"}).`
+          : `Seeded on ${consoleEnvLabel}.`;
+        const devicePart = prepOk && prepNames
+          ? `Phones reset: ${prepNames}. `
+          : prepOk
+            ? "Phones reset. "
+            : "";
+        const syncPart = runCode ? `Run sync id on phone: ${runCode}. ` : "";
+        setStatus(`${devicePart}${syncPart}${seedPart}`, true);
       } catch (e) {
+        clearRunProgress();
         setStatus(String(e.message || e), false);
       } finally {
         isSeeding = false;
+        runProgressLabel = "";
+        clearRunProgress();
         updateRunButtons();
       }
     }
@@ -2416,6 +2498,8 @@
         logJson: raw,
       };
       if (currentRun?.run_id) body.run_id = currentRun.run_id;
+      if (lastCloudLogMeta.run_id) body.upload_run_id = lastCloudLogMeta.run_id;
+      if (lastCloudLogMeta.scenario_id) body.upload_scenario_id = lastCloudLogMeta.scenario_id;
       const phone = selectedPhone();
       if (phone?.app_id) body.app_id = phone.app_id;
       setStatus("Checking log…");
