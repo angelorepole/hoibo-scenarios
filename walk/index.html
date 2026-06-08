@@ -34,7 +34,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260608104749" />
+  <meta name="walk-build" content="20260608111349" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios/static/pin-orange.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios/assets/pin-orange.svg" />
@@ -1497,13 +1497,7 @@
         runBtn.textContent = `Resetting phones…`;
         cleanupBtn.disabled = true;
         if (abandonBtn) abandonBtn.disabled = true;
-        hint.hidden = false;
-        const names = runProgressLabel || "selected phones";
-        hint.textContent = `Wiping apps and reinstalling walk-test build on: ${names}. Then seeding ${env}.`;
-        setRunProgress(
-          `${names} — delete old app, install fresh walk-test build (Deal alert test log). Builds can take several minutes. Do not lock the phones.`,
-          "Step 1 — Reset phones (fresh install)",
-        );
+        if (hint) hint.hidden = true;
         return;
       }
       clearRunProgress();
@@ -1540,10 +1534,6 @@
       if (box) box.hidden = false;
       if (heading) heading.textContent = title || "Resetting phones…";
       if (text) text.textContent = msg;
-      if (statusEl) {
-        statusEl.textContent = msg;
-        statusEl.className = "status running";
-      }
     }
 
     function clearRunProgress() {
