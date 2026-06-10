@@ -3,17 +3,57 @@
   const isLocal = host === "127.0.0.1" || host === "localhost";
   if (isLocal) return;
 
-  const KEY = "scenarios_admin_api_key";
-  const ENV_KEY = "scenarios_console_env";
+  const LEGACY_KEY = "scenarios_admin_api_key";
+  /** Decrypts catalog/devices/env blobs (Pages build uses .env.stage ADMIN_API_KEY). */
+  const CRYPTO_KEY = "scenarios_crypto_admin_key";
+  /** Per-env Supabase x-admin-api-key (STAGE and PROD differ). */
+  const API_KEY_PREFIX = "scenarios_api_key_";
 
-  function adminKey() {
-    let k = sessionStorage.getItem(KEY);
+  function migrateLegacyAdminKey() {
+    const legacy = sessionStorage.getItem(LEGACY_KEY);
+    if (!legacy) return;
+    if (!sessionStorage.getItem(CRYPTO_KEY)) {
+      sessionStorage.setItem(CRYPTO_KEY, legacy);
+    }
+    if (!sessionStorage.getItem(API_KEY_PREFIX + "stage")) {
+      sessionStorage.setItem(API_KEY_PREFIX + "stage", legacy);
+    }
+    sessionStorage.removeItem(LEGACY_KEY);
+  }
+
+  /** Key for decrypting *.enc.json (build-time; usually .env.stage). */
+  function cryptoAdminKey() {
+    migrateLegacyAdminKey();
+    let k = sessionStorage.getItem(CRYPTO_KEY);
     if (!k) {
-      k = prompt("Admin API key (from .env.stage / Supabase secrets — not stored in git):");
-      if (k) sessionStorage.setItem(KEY, k.trim());
+      k = prompt(
+        "Admin API key for encrypted scenario files (Pages build key — usually from .env.stage):",
+      );
+      if (k) sessionStorage.setItem(CRYPTO_KEY, k.trim());
     }
     return (k || "").trim();
   }
+
+  /** Key for scenario-runs / field-log Edge Functions on the selected env. */
+  function supabaseAdminKey(env) {
+    migrateLegacyAdminKey();
+    const slug = String(env || consoleEnv || "stage").toLowerCase();
+    const storageKey = API_KEY_PREFIX + slug;
+    let k = sessionStorage.getItem(storageKey);
+    if (!k) {
+      k = prompt(
+        `Supabase admin key for ${slug.toUpperCase()} (from FlashSale .env.${slug} — not the same as STAGE if PROD):`,
+      );
+      if (k) sessionStorage.setItem(storageKey, k.trim());
+    }
+    return (k || "").trim();
+  }
+
+  function clearSupabaseAdminKey(env) {
+    sessionStorage.removeItem(API_KEY_PREFIX + String(env || consoleEnv).toLowerCase());
+  }
+
+  const ENV_KEY = "scenarios_console_env";
 
   let envConfigCache = null;
   let catalogCache = null;
@@ -22,7 +62,7 @@
     if (!envConfigCache) {
       envConfigCache = await ScenarioHostedCrypto.fetchEncryptedJson(
         "../environments.enc.json",
-        adminKey(),
+        cryptoAdminKey(),
       );
     }
     return envConfigCache;
@@ -32,7 +72,7 @@
     if (!catalogCache) {
       catalogCache = await ScenarioHostedCrypto.fetchEncryptedJson(
         "../scenarios/catalog.enc.json",
-        adminKey(),
+        cryptoAdminKey(),
       );
     }
     return catalogCache;
@@ -100,12 +140,20 @@
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-api-key": adminKey(),
+        "x-admin-api-key": supabaseAdminKey(consoleEnv),
       },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.error || "HTTP " + res.status);
+    if (res.status === 401) {
+      clearSupabaseAdminKey(consoleEnv);
+      throw new Error(
+        `Admin key rejected for ${consoleEnv.toUpperCase()} — use ADMIN_API_KEY from FlashSale .env.${consoleEnv} (not .env.stage). Refresh and try again.`,
+      );
+    }
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || data.message || "HTTP " + res.status);
+    }
     return data;
   }
 
@@ -165,7 +213,7 @@
       try {
         const devices = await ScenarioHostedCrypto.fetchEncryptedJson(
           "../devices.enc.json",
-          adminKey(),
+          cryptoAdminKey(),
         );
         return { ok: true, devices: devices.devices || devices };
       } catch (_) {
