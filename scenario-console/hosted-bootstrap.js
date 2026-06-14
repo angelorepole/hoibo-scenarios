@@ -459,6 +459,7 @@
         const data = await supabaseFn("list-field-logs", {
           app_id: q.get("app_id") || undefined,
           limit: Number(q.get("limit") || 5),
+          include_entries: q.get("include_entries") === "true",
           console_env: consoleEnv,
         });
         return { ok: true, uploads: data.uploads || [] };

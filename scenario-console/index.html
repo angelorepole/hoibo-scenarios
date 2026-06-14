@@ -33,7 +33,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260614142239" />
+  <meta name="walk-build" content="20260614163000" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" />
@@ -2711,7 +2711,7 @@
       if (statusEl) statusEl.textContent = "Loading uploads…";
       try {
         const data = await api(
-          `/api/scenarios/field-logs?app_id=${encodeURIComponent(appId)}&limit=5`
+          `/api/scenarios/field-logs?app_id=${encodeURIComponent(appId)}&limit=10&include_entries=true`
         );
         const uploads = data.uploads || [];
         if (!uploads.length) {
@@ -2721,6 +2721,11 @@
           }
           return;
         }
+        uploads.sort((a, b) => {
+          const at = Date.parse(a.uploaded_at || "") || 0;
+          const bt = Date.parse(b.uploaded_at || "") || 0;
+          return bt - at;
+        });
         const latest = uploads[0];
         const full = await api("/api/scenarios/field-logs", {
           method: "POST",
