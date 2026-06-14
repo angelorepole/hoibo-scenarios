@@ -370,6 +370,30 @@
       });
       return { ok: true, run: data.run };
     }
+    if (path === "/api/scenarios/validate-run-sync" && method === "POST") {
+      const appId = String(body.app_id || "").trim();
+      const runId = String(body.run_id || "").trim();
+      if (!appId) throw new Error("app_id required");
+      if (!runId) throw new Error("run_id required");
+      if (!globalThis.ScenarioFieldLog?.validateRunSyncDiagnostic) {
+        throw new Error("field-log-analyze.js not loaded");
+      }
+      const runMeta = await loadRunMeta(runId);
+      const listed = await supabaseFn("list-field-logs", {
+        app_id: appId,
+        limit: 10,
+        include_entries: true,
+        console_env: consoleEnv,
+      });
+      const diagnostic = globalThis.ScenarioFieldLog.validateRunSyncDiagnostic({
+        appId,
+        runMeta,
+        uploads: listed.uploads || [],
+      });
+      const syncOk = Boolean(diagnostic.ok);
+      const { ok: _dropOk, ...rest } = diagnostic;
+      return { ok: true, syncOk, ...rest };
+    }
     if (path === "/api/scenarios/analyze-log" && method === "POST") {
       const scenarioId = body.scenario_id || body.preset_id;
       if (!scenarioId) throw new Error("scenario_id required");
@@ -380,9 +404,11 @@
       }
       const scenario = await findScenario(String(scenarioId));
       const runMeta = body.run_id ? await loadRunMeta(String(body.run_id)) : null;
+      const uploadScenarioId = body.upload_scenario_id || body.log_scenario_id || null;
+      const uploadRunId = body.upload_run_id || body.log_run_id || null;
       const result = globalThis.ScenarioFieldLog.analyzeFieldLog(scenario, log, runMeta, {
-        uploadScenarioId: body.upload_scenario_id || body.log_scenario_id || scenarioId,
-        uploadRunId: body.upload_run_id || body.log_run_id || body.run_id,
+        uploadScenarioId,
+        uploadRunId,
       });
       const playbookSteps = globalThis.ScenarioPlaybook
         ? globalThis.ScenarioPlaybook.evaluatePlaybook(scenario, {

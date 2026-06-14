@@ -180,6 +180,174 @@ Be concise. Plain English.`;
     }
   }
 
+  function pickCloudUpload(uploads, runMeta) {
+    const rows = Array.isArray(uploads) ? [...uploads] : [];
+    rows.sort((a, b) => {
+      const at = Date.parse(a.uploaded_at || "") || 0;
+      const bt = Date.parse(b.uploaded_at || "") || 0;
+      return bt - at;
+    });
+    if (!rows.length) {
+      return { upload: null, reason: "none", mismatch: false };
+    }
+    if (!runMeta?.run_id) {
+      return { upload: rows[0], reason: "latest", mismatch: false };
+    }
+    const expected = String(runMeta.run_id);
+    for (const row of rows) {
+      const stamp = String(row.run_id || "").trim();
+      if (stamp && runIdsMatch(expected, stamp)) {
+        return { upload: row, reason: "run_match", mismatch: false };
+      }
+    }
+    const latest = rows[0];
+    const latestStamp = String(latest.run_id || "").trim();
+    const mismatch = Boolean(
+      latestStamp && !runIdsMatch(expected, latestStamp),
+    );
+    return {
+      upload: latest,
+      reason: mismatch ? "latest_mismatch" : "latest",
+      mismatch,
+    };
+  }
+
+  function validateRunSyncDiagnostic({ appId, runMeta, uploads }) {
+    const steps = [];
+    const app = String(appId || "").trim();
+
+    if (!runMeta?.run_id) {
+      steps.push({
+        id: "console_run",
+        label: "Active console run",
+        ok: false,
+        detail: "No active run — press Run on the scenario first.",
+        fix: "Start a scenario Run from the walk console.",
+      });
+      return {
+        ok: false,
+        steps,
+        summary: "No active console run.",
+        recommendation: steps[0].fix,
+      };
+    }
+
+    const expectedRun = String(runMeta.run_id).trim();
+    const expectedShort = String(runMeta.short_id || expectedRun.split("-")[0]);
+    const expectedScenario = String(
+      runMeta.scenario_id || runMeta.preset_id || "",
+    ).trim();
+    steps.push({
+      id: "console_run",
+      label: "Active console run",
+      ok: true,
+      detail: `Expecting run ${expectedShort}${expectedScenario ? ` · ${expectedScenario}` : ""}`,
+    });
+
+    if (!app) {
+      steps.push({
+        id: "app_id",
+        label: "Phone app id",
+        ok: false,
+        detail: "No app_id.",
+        fix: "Match devices.json to Deal alert test log → App id on the phone.",
+      });
+      return { ok: false, steps, summary: "Missing app_id.", recommendation: steps[1].fix };
+    }
+    steps.push({ id: "app_id", label: "Phone app id", ok: true, detail: app });
+
+    const rows = Array.isArray(uploads) ? uploads : [];
+    if (!rows.length) {
+      steps.push({
+        id: "cloud_list",
+        label: "Cloud uploads",
+        ok: false,
+        detail: `No uploads for ${app}.`,
+        fix: "On phone: Deal alert test log → Upload log.",
+      });
+      return {
+        ok: false,
+        steps,
+        summary: "No cloud uploads yet.",
+        recommendation: "Walk, then upload from the phone.",
+      };
+    }
+    steps.push({
+      id: "cloud_list",
+      label: "Cloud uploads",
+      ok: true,
+      detail: `${rows.length} file(s) in storage`,
+    });
+
+    const picked = pickCloudUpload(rows, runMeta);
+    const upload = picked.upload;
+    const stampRun = String(upload?.run_id || "").trim();
+    const stampScenario = String(upload?.scenario_id || "").trim();
+    const stampShort = stampRun ? stampRun.split("-")[0] : "?";
+    const uploadedAt = String(upload?.uploaded_at || "?");
+
+    if (picked.reason === "run_match") {
+      steps.push({
+        id: "cloud_pick",
+        label: "Pick upload for this run",
+        ok: true,
+        detail: `Found upload stamped ${stampShort} · ${uploadedAt}`,
+      });
+    } else if (picked.mismatch) {
+      steps.push({
+        id: "cloud_pick",
+        label: "Pick upload for this run",
+        ok: false,
+        detail: `Latest is ${stampShort} (${stampScenario || "?"}) — no upload matches run ${expectedShort}.`,
+        fix: "Upload from phone when Run sync matches the console banner.",
+      });
+    } else {
+      steps.push({
+        id: "cloud_pick",
+        label: "Pick upload for this run",
+        ok: true,
+        detail: `Using latest upload · ${uploadedAt}`,
+      });
+    }
+
+    const runOk = Boolean(stampRun) && runIdsMatch(expectedRun, stampRun);
+    steps.push({
+      id: "stamp_run",
+      label: "Cloud run stamp",
+      ok: runOk,
+      detail: runOk
+        ? `Matches (${expectedShort})`
+        : `Console expects ${expectedShort}, cloud stamped ${stampShort || "(missing)"}`,
+      fix: runOk ? undefined : "Phone Run sync must match console — then upload again.",
+    });
+
+    let scenarioOk = true;
+    if (expectedScenario && stampScenario) {
+      scenarioOk = stampScenario === expectedScenario;
+      steps.push({
+        id: "stamp_scenario",
+        label: "Cloud scenario stamp",
+        ok: scenarioOk,
+        detail: scenarioOk
+          ? `Matches (${expectedScenario})`
+          : `Console expects ${expectedScenario}, cloud stamped ${stampScenario}`,
+        fix: scenarioOk ? undefined : "Re-run scenario from Mac console, then upload.",
+      });
+    }
+
+    const allOk = runOk && scenarioOk && !picked.mismatch;
+    return {
+      ok: allOk,
+      steps,
+      summary: allOk ? "Run sync OK — safe to Check log." : "Run sync FAILED — fix before Check log.",
+      recommendation: allOk
+        ? `Ready for Check log — ${upload?.entry_count ?? "?"} entries stamped ${stampShort}.`
+        : `Cloud still has ${stampShort} / ${stampScenario || "?"}. Upload when phone shows ${expectedShort}.`,
+      picked_upload: upload,
+      pick_reason: picked.reason,
+    };
+  }
+
   /**
    * Build analyze-log / report-log POST body.
    * File stamp (upload_*) must stay separate from active console run (console_run_*).
@@ -199,6 +367,8 @@ Be concise. Plain English.`;
     if (fileScenario) body.upload_scenario_id = fileScenario;
     if (fileRun) body.upload_run_id = fileRun;
     if (fileUploadedAt) body.log_uploaded_at = fileUploadedAt;
+    if (meta.scenario_id) body.cloud_upload_scenario_id = meta.scenario_id;
+    if (meta.run_id) body.cloud_upload_run_id = meta.run_id;
     const run = ctx.currentRun;
     if (run?.run_id) {
       body.run_id = run.run_id;
@@ -372,6 +542,8 @@ Be concise. Plain English.`;
     parseFieldLogUpload,
     parseLogUploadMeta,
     buildFieldLogRequestBody,
+    pickCloudUpload,
+    validateRunSyncDiagnostic,
     runIdsMatch,
     analyzeFieldLog,
     buildLlmReviewPrompt,

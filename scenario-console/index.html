@@ -33,7 +33,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260614163000" />
+  <meta name="walk-build" content="20260614172710" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" />
@@ -1162,23 +1162,24 @@
       <div class="modal-body">
         <div class="workflow-note mb-3">
           <strong>After your walk:</strong><br />
-          <strong>Phone:</strong> Settings → <em>Deal alert test log</em> → <strong>Upload log</strong>.<br />
-          Then <em>Load cloud log</em> here → <em>Check log</em> (playbook pass/fail) or <em>Intent report</em> (engine story across the whole log).
+          1. <strong>Phone:</strong> Deal alert test log → <strong>Upload log</strong><br />
+          2. <strong>Here:</strong> pick phone → <strong>Load cloud log</strong> → <strong>Check log</strong>
         </div>
         <div class="log-check mt-0 mb-0" id="log-check" style="border: none; background: transparent; padding: 0;">
-          <label for="log-phone" class="form-label">Phone (cloud upload)</label>
+          <label for="log-phone" class="form-label">Phone</label>
           <div class="btn-row" style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem;">
             <select id="log-phone"></select>
             <button type="button" class="btn btn-secondary" id="btn-fetch-cloud-log" style="width: auto; padding: 0.45rem 0.75rem;">Load cloud log</button>
           </div>
           <p class="hint" id="cloud-log-status"></p>
-          <p class="hint mt-0">Or paste JSON manually. LLM prompt for multi-day or category-off.</p>
-          <input type="file" id="log-file" class="file-input" accept=".json,application/json,text/plain" />
-          <textarea id="log-json" placeholder='[{"at":"…","gateDecision":"suppress","opportunitySum":7.2,…}]'></textarea>
+          <details class="log-advanced mt-2 mb-2">
+            <summary class="hint" style="cursor: pointer;">Advanced — paste JSON or choose file</summary>
+            <input type="file" id="log-file" class="file-input mt-2" accept=".json,application/json,text/plain" />
+          </details>
+          <textarea id="log-json" placeholder='Load cloud log — or paste entries JSON here'></textarea>
           <div class="btn-row mt-2">
             <button type="button" class="btn btn-primary" id="btn-check-log">Check log</button>
-            <button type="button" class="btn btn-primary" id="btn-intent-report">Intent report</button>
-            <button type="button" class="btn btn-secondary" id="btn-copy-llm">Copy LLM</button>
+            <button type="button" class="btn btn-secondary" id="btn-intent-report">Intent report</button>
           </div>
           <div class="check-list mt-3" id="check-results" hidden></div>
         </div>
@@ -1962,6 +1963,7 @@
           `<span class="run-id">${currentRun.short_id || (currentRun.run_id || "").slice(0, 8)}</span>` +
           ` · ${consoleEnvLabel} · ${devices}<br />` +
           `Phone field log should show run <strong>${currentRun.short_id || (currentRun.run_id || "").slice(0, 8)}</strong>` +
+          `<br />After fresh install: verify <strong>App id</strong> on phone matches <code>shared/devices.json</code>` +
           `<br />Centre ${centre} · ${currentRun.radius_m || radiusM} m`;
       }
 
@@ -2701,84 +2703,124 @@
       }
     }
 
+    function renderSyncSteps(data) {
+      const box = el("check-results");
+      if (!box) return;
+      const steps = data?.steps || [];
+      if (!steps.length) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      let html = steps
+        .map((s) => {
+          const cls = s.ok ? "check-pass" : "check-fail";
+          const icon = s.ok ? "✓" : "✗";
+          const fix = s.fix ? ` — ${s.fix}` : "";
+          return `<div class="check-row ${cls}">${icon} ${s.label}: ${s.detail}${fix}</div>`;
+        })
+        .join("");
+      if (data.syncOk) {
+        html += `<div class="check-row check-pass">Run sync OK — tap Check log.</div>`;
+      }
+      box.innerHTML = html;
+    }
+
+    async function fetchCloudLogEntries(appId) {
+      const statusEl = el("cloud-log-status");
+      const data = await api(
+        `/api/scenarios/field-logs?app_id=${encodeURIComponent(appId)}&limit=10&include_entries=true`
+      );
+      const uploads = data.uploads || [];
+      if (!uploads.length) {
+        if (statusEl) {
+          statusEl.textContent =
+            `No uploads for ${appId}. App id on phone must match shared/devices.json.`;
+        }
+        return false;
+      }
+      uploads.sort((a, b) => {
+        const at = Date.parse(a.uploaded_at || "") || 0;
+        const bt = Date.parse(b.uploaded_at || "") || 0;
+        return bt - at;
+      });
+      const picked = ScenarioFieldLog.pickCloudUpload(uploads, currentRun);
+      const latest = picked.upload;
+      if (!latest) {
+        if (statusEl) statusEl.textContent = `No uploads for ${appId}.`;
+        return false;
+      }
+      const full = await api("/api/scenarios/field-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: latest.path }),
+      });
+      const entries = full.entries || full.document?.entries || [];
+      el("log-json").value = JSON.stringify(entries, null, 2);
+      const doc = full.document || {};
+      lastCloudLogMeta = {
+        scenario_id: doc.scenario_id || null,
+        run_id: doc.run_id || null,
+        uploaded_at: doc.uploaded_at || latest.uploaded_at || null,
+        memory_trace: doc.memory_trace || full.memory_trace || null,
+      };
+      if (doc.scenario_id && !currentRun) {
+        const catSel = el("category");
+        const presetSel = el("preset");
+        const match = scenarioList.find((s) => s.id === doc.scenario_id);
+        if (match && catSel) {
+          catSel.value = match.category || "intent";
+          catSel.dispatchEvent(new Event("change"));
+          presetSel.value = doc.scenario_id;
+          presetSel.dispatchEvent(new Event("change"));
+        }
+      }
+      if (statusEl) {
+        const sync = doc.run_id ? ` · run ${String(doc.run_id).slice(0, 8)}` : "";
+        const pickNote = picked.reason === "run_match" ? " · matched active run" : "";
+        statusEl.textContent =
+          `Loaded ${entries.length} entries${sync}${pickNote} · ${doc.uploaded_at || latest.path}`;
+      }
+      refreshPlaybookStatus();
+      return true;
+    }
+
     async function fetchCloudLog() {
       const appId = el("log-phone")?.value;
       const statusEl = el("cloud-log-status");
       if (!appId) {
-        if (statusEl) statusEl.textContent = "Set app_id in devices.json for this phone.";
+        if (statusEl) statusEl.textContent = "Set customer_app_id in shared/devices.json for this phone.";
         return;
       }
-      if (statusEl) statusEl.textContent = "Loading uploads…";
+      if (statusEl) statusEl.textContent = "Checking run sync…";
       try {
-        const data = await api(
-          `/api/scenarios/field-logs?app_id=${encodeURIComponent(appId)}&limit=10&include_entries=true`
-        );
-        const uploads = data.uploads || [];
-        if (!uploads.length) {
-          if (statusEl) {
-            statusEl.textContent =
-              `No uploads for ${appId}. Same phone in dropdown? App id on phone must match devices.json.`;
+        if (currentRun?.run_id) {
+          const syncData = await api("/api/scenarios/validate-run-sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ app_id: appId, run_id: currentRun.run_id }),
+          });
+          renderSyncSteps(syncData);
+          const passed = Boolean(syncData.syncOk);
+          const msg = syncData.recommendation || syncData.summary || "Run sync check complete.";
+          if (!passed) {
+            if (statusEl) statusEl.textContent = syncData.summary || msg;
+            setStatus(msg, false);
+            return;
           }
-          return;
+          if (statusEl) statusEl.textContent = "Loading cloud log…";
+          localStorage.setItem(
+            `hoibo_verified_app_id_${appId}`,
+            JSON.stringify({ at: new Date().toISOString(), runId: currentRun.run_id }),
+          );
         }
-        uploads.sort((a, b) => {
-          const at = Date.parse(a.uploaded_at || "") || 0;
-          const bt = Date.parse(b.uploaded_at || "") || 0;
-          return bt - at;
-        });
-        const latest = uploads[0];
-        const full = await api("/api/scenarios/field-logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: latest.path }),
-        });
-        const entries = full.entries || full.document?.entries || [];
-        el("log-json").value = JSON.stringify(entries, null, 2);
-        const doc = full.document || {};
-        lastCloudLogMeta = {
-          scenario_id: doc.scenario_id || null,
-          run_id: doc.run_id || null,
-          uploaded_at: doc.uploaded_at || latest.uploaded_at || null,
-          memory_trace: doc.memory_trace || full.memory_trace || null,
-        };
-        const consoleRun = currentRun?.run_id;
-        const uploadRun = doc.run_id;
-        const runMismatch =
-          consoleRun && uploadRun && !runIdsMatch(consoleRun, uploadRun);
-        const scenarioMismatch =
-          currentRun &&
-          doc.scenario_id &&
-          (currentRun.scenario_id || currentRun.preset_id || activeScenarioId()) !==
-            doc.scenario_id;
-        if (runMismatch || scenarioMismatch) {
-          // Keep memory_trace; run/scenario for Check log come from active console run.
+        const loaded = await fetchCloudLogEntries(appId);
+        if (loaded) {
+          setStatus("Cloud log loaded — tap Check log.", true);
         }
-        if (doc.scenario_id && !currentRun) {
-          const catSel = el("category");
-          const presetSel = el("preset");
-          const match = scenarioList.find((s) => s.id === doc.scenario_id);
-          if (match && catSel) {
-            catSel.value = match.category || "intent";
-            catSel.dispatchEvent(new Event("change"));
-            presetSel.value = doc.scenario_id;
-            presetSel.dispatchEvent(new Event("change"));
-          }
-        }
-        if (statusEl) {
-          const sync = doc.run_id ? ` · run ${String(doc.run_id).slice(0, 8)}` : "";
-          if (runMismatch || scenarioMismatch) {
-            const want = currentRun?.short_id || String(consoleRun || "").slice(0, 8);
-            const got = String(uploadRun || "").slice(0, 8);
-            statusEl.textContent =
-              `Cloud file stamped ${got} (${doc.scenario_id || "?"}) — ` +
-              `Check log uses active run ${want}. Re-upload from phone to fix cloud storage.`;
-          } else {
-            statusEl.textContent = `Loaded ${entries.length} entries${sync} · ${doc.uploaded_at || latest.path}`;
-          }
-        }
-        refreshPlaybookStatus();
       } catch (e) {
         if (statusEl) statusEl.textContent = String(e.message || e);
+        setStatus(String(e.message || e), false);
       }
     }
 
@@ -3002,7 +3044,9 @@
             ? "Phones reset. "
             : "";
         const syncPart = runCode ? `Run sync id on phone: ${runCode}. ` : "";
-        setStatus(`${devicePart}${syncPart}${seedPart}`, true);
+        const appIdPart =
+          "⚠️ After fresh install: copy App id from Deal alert test log on phone — must match shared/devices.json before Field log. ";
+        setStatus(`${devicePart}${syncPart}${appIdPart}${seedPart}`, true);
       } catch (e) {
         clearRunProgress();
         setStatus(String(e.message || e), false);
@@ -3271,6 +3315,16 @@
         html += `<div class="check-row ${cls}">${icon} ${c.id}: ${c.detail}${idx}</div>`;
       });
       box.innerHTML = html;
+      if (data.llmPrompt) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "btn btn-secondary mt-2";
+        copyBtn.style.width = "auto";
+        copyBtn.style.padding = "0.35rem 0.65rem";
+        copyBtn.textContent = "Copy review prompt for Cursor";
+        copyBtn.onclick = () => copyLlmPrompt();
+        box.appendChild(copyBtn);
+      }
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
@@ -3304,7 +3358,14 @@
     async function checkFieldLog() {
       const raw = el("log-json").value.trim();
       if (!raw) {
-        setStatus("Paste field log JSON first.", false);
+        setStatus("Load cloud log first (or paste JSON under Advanced).", false);
+        return;
+      }
+      if (currentRun?.run_id && (!lastCloudLogMeta.run_id || !lastCloudLogMeta.scenario_id)) {
+        setStatus(
+          "Log has no cloud stamp — Load cloud log first (or paste full upload JSON with run_id).",
+          false,
+        );
         return;
       }
       setStatus("Checking log…");
@@ -3362,11 +3423,7 @@
           const data = await api("/api/scenarios/analyze-log", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              scenario_id: activeScenarioId(),
-              logJson: raw,
-              run_id: currentRun?.run_id,
-            }),
+            body: JSON.stringify(fieldLogRequestBody(raw)),
           });
           lastAnalysis = data;
           prompt = data.llmPrompt;
@@ -3398,7 +3455,6 @@
 
     el("btn-check-log").onclick = checkFieldLog;
     el("btn-intent-report").onclick = intentReport;
-    el("btn-copy-llm").onclick = copyLlmPrompt;
     el("btn-fetch-cloud-log").onclick = fetchCloudLog;
 
     el("btn-run").onclick = runScenario;
