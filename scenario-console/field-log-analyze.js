@@ -502,6 +502,81 @@ Be concise. Plain English.`;
       checks.push({ id: "manual", pass: null, detail: note });
     });
 
+    function formatOfferRadius(m) {
+      const rounded = Math.round(Number(m));
+      if (rounded >= 1000 && rounded % 1000 === 0) return `${rounded / 1000} km`;
+      return `${rounded} m`;
+    }
+
+    function settingsFromEntries(list) {
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        const raw = list[i]?.userSettings;
+        if (raw && typeof raw === "object") return raw;
+      }
+      return null;
+    }
+
+    function evaluatePhoneSettings(list, expected) {
+      if (!expected || !Object.keys(expected).length) return [];
+      const actual = settingsFromEntries(list);
+      if (!actual) {
+        return [{
+          id: "phone-settings-logged",
+          pass: false,
+          detail:
+            "Log has no phone settings — update the walk-test app, re-walk, and upload again.",
+        }];
+      }
+      const out = [];
+      if (expected.offerRadiusM != null) {
+        const want = Math.round(expected.offerRadiusM);
+        const got = Math.round(Number(actual.offerRadiusM || 0));
+        const ok = got === want;
+        out.push({
+          id: "phone-offer-radius",
+          pass: ok,
+          detail: ok
+            ? `Offer radius ${formatOfferRadius(got)} (matches scenario)`
+            : `You should have set Offer radius to ${formatOfferRadius(want)} — ` +
+              `log shows ${formatOfferRadius(got)}. ` +
+              "Fix: Bottom tab Settings → Offer radius.",
+        });
+      }
+      if (expected.dealAlertsOn != null) {
+        const got = actual.dealAlertsOn !== false;
+        const ok = got === expected.dealAlertsOn;
+        out.push({
+          id: "phone-deal-alerts",
+          pass: ok,
+          detail: ok
+            ? `Deal alerts ${got ? "ON" : "OFF"} (matches scenario)`
+            : expected.dealAlertsOn
+              ? "You should have turned Deal alerts ON — log shows OFF. " +
+                "Fix: Bottom tab Settings → Notifications → Deal alerts."
+              : "Scenario needs Deal alerts OFF — log shows ON.",
+        });
+      }
+      if (expected.disabledCategories?.length) {
+        const enabled = new Set(actual.enabledCategories || []);
+        const stillOn = expected.disabledCategories.filter((c) => enabled.has(c));
+        const ok = stillOn.length === 0;
+        out.push({
+          id: "phone-categories",
+          pass: ok,
+          detail: ok
+            ? "Category toggles match scenario"
+            : `These should be OFF but log shows ON: ${stillOn.join(", ")}. ` +
+              "Fix: Settings → Notifications → What you're into.",
+        });
+      }
+      return out;
+    }
+
+    for (const phone of evaluatePhoneSettings(entries, scenario.fieldLogPhoneSettings)) {
+      checks.push(phone);
+      if (phone.pass === false) failed = true;
+    }
+
     const orGroups =
       rules.enginePassIfAny ||
       scenario.enginePassIfAny ||
@@ -516,12 +591,92 @@ Be concise. Plain English.`;
       if (engine.pass === false) failed = true;
     }
 
+    const expectedPhone = scenario.fieldLogPhoneSettings;
+    if (expectedPhone?.offerRadiusM) {
+      const actual = settingsFromEntries(entries);
+      if (actual?.offerRadiusM) {
+        const want = Math.round(expectedPhone.offerRadiusM);
+        const got = Math.round(Number(actual.offerRadiusM));
+        if (got < want) {
+          const hint =
+            `Offer-radius-density failed partly because Offer radius was ${formatOfferRadius(got)} ` +
+            `(scenario needs ${formatOfferRadius(want)}).`;
+          const density = checks.find((c) => c.id === "offer-radius-density" && c.pass === false);
+          if (density) density.detail = `${density.detail} ${hint}`;
+        }
+      }
+    }
+
     for (const mem of engineApi().evaluateMemoryTraceRules(
       memoryTrace && typeof memoryTrace === "object" ? memoryTrace : null,
       rules.memoryTraceRules || [],
     )) {
       checks.push(mem);
       if (mem.pass === false) failed = true;
+    }
+
+    function entryCoords(entry) {
+      const lat = entry.lat;
+      const lng = entry.lng;
+      if (typeof lat !== "number" || typeof lng !== "number") return null;
+      return { lat, lng };
+    }
+
+    function haversineM(a, b) {
+      const R = 6371000;
+      const toRad = (d) => (d * Math.PI) / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const s1 = Math.sin(dLat / 2);
+      const s2 = Math.sin(dLng / 2);
+      const h = s1 * s1 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * s2 * s2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    function maxDisplacement(list) {
+      const coords = list.map(entryCoords).filter(Boolean);
+      if (coords.length < 2) return 0;
+      let max = 0;
+      for (let i = 0; i < coords.length; i++) {
+        for (let j = i + 1; j < coords.length; j++) {
+          max = Math.max(max, haversineM(coords[i], coords[j]));
+        }
+      }
+      return max;
+    }
+
+    function diagnoseMovement(list) {
+      const stationary = new Set(["stationary", "still", "unknown", ""]);
+      const maxDisp = maxDisplacement(list);
+      const allStill = list.every((e) => stationary.has(String(e.activity || "")));
+      if (allStill && maxDisp < 200) {
+        return {
+          kind: "playbook_incomplete",
+          detail:
+            "Log correctly shows you have not moved yet (still). " +
+            "If you have not done the walk step, continue the playbook and upload when finished — " +
+            "this is not a log bug.",
+        };
+      }
+      if (allStill && maxDisp >= 200) {
+        return {
+          kind: "possible_bug",
+          detail:
+            `Log shows movement (~${Math.round(maxDisp)} m) but no walking or commute. ` +
+            "If you did walk, check motion permissions — otherwise treat as a possible bug.",
+        };
+      }
+      return {
+        kind: "unclear",
+        detail: "No walking or commute in the log. Finish the walk step if you have not yet.",
+      };
+    }
+
+    let movementDiagnosis = null;
+    const movementCheck = checks.find((c) => c.id === "movement-or-commute" && c.pass === false);
+    if (movementCheck) {
+      movementDiagnosis = diagnoseMovement(entries);
+      movementCheck.detail = `${movementCheck.detail} ${movementDiagnosis.detail}`;
     }
 
     return {
@@ -534,7 +689,46 @@ Be concise. Plain English.`;
       fieldLogExpect: scenario.fieldLogExpect || [],
       summary: summarize(checks, failed),
       llmPrompt: buildLlmReviewPrompt(scenario, entries, runMeta),
+      movementDiagnosis,
     };
+  }
+
+  function buildEngineValidationReport(check, intent) {
+    const failed = (check.checks || []).filter((c) => c.pass === false);
+    const blockedIds = new Set([
+      "run_sync",
+      "scenario_sync",
+      "verbose_log",
+      "min_entries",
+      "phone-settings-logged",
+      "phone-offer-radius",
+      "phone-deal-alerts",
+      "phone-categories",
+    ]);
+    const isBlocked = failed.some((c) => blockedIds.has(c.id));
+    const isIncomplete =
+      !check.ok && !isBlocked && check.movementDiagnosis?.kind === "playbook_incomplete";
+    let status = "not_working";
+    let headline = "No — intent engine did not pass this scenario yet.";
+    let nextStep = "Walk the scenario playbook, upload from phone, then Engine report again.";
+    if (check.ok) {
+      status = "working";
+      headline = "Yes — intent engine is working for this scenario.";
+    } else if (isBlocked) {
+      status = "blocked";
+      headline = "Can't tell yet — fix the upload or run setup first.";
+    } else if (isIncomplete) {
+      status = "incomplete";
+      headline = "Not finished yet — the log looks correct so far.";
+      nextStep =
+        "If you have not done the walk step yet, continue the playbook and upload when finished. " +
+        "Only treat movement failures as bugs if you already walked and the log still shows still.";
+    } else if (check.movementDiagnosis?.kind === "possible_bug") {
+      headline = "Possible bug — you moved but walking was not recorded.";
+      nextStep =
+        "Check Settings → Permissions (motion). If those are OK, file this log as a movement-detection bug.";
+    }
+    return { status, headline, nextStep, check, intent };
   }
 
   global.ScenarioFieldLog = {
@@ -546,6 +740,7 @@ Be concise. Plain English.`;
     validateRunSyncDiagnostic,
     runIdsMatch,
     analyzeFieldLog,
+    buildEngineValidationReport,
     buildLlmReviewPrompt,
     evaluateEngineRules,
     get WALK_FIELD_LOG_RULES() {
