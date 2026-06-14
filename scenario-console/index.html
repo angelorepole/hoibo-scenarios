@@ -33,7 +33,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260614095829" />
+  <meta name="walk-build" content="20260614142239" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" />
@@ -1387,7 +1387,12 @@
     let hasCenter = false;
     let suppressNextClick = false;
     let lastAnalysis = null;
-    let lastCloudLogMeta = { scenario_id: null, run_id: null };
+    let lastCloudLogMeta = {
+      scenario_id: null,
+      run_id: null,
+      uploaded_at: null,
+      memory_trace: null,
+    };
     let isSeeding = false;
     let runProgressLabel = "";
     let playbookProgress = [];
@@ -2728,7 +2733,21 @@
         lastCloudLogMeta = {
           scenario_id: doc.scenario_id || null,
           run_id: doc.run_id || null,
+          uploaded_at: doc.uploaded_at || latest.uploaded_at || null,
+          memory_trace: doc.memory_trace || full.memory_trace || null,
         };
+        const consoleRun = currentRun?.run_id;
+        const uploadRun = doc.run_id;
+        const runMismatch =
+          consoleRun && uploadRun && !runIdsMatch(consoleRun, uploadRun);
+        const scenarioMismatch =
+          currentRun &&
+          doc.scenario_id &&
+          (currentRun.scenario_id || currentRun.preset_id || activeScenarioId()) !==
+            doc.scenario_id;
+        if (runMismatch || scenarioMismatch) {
+          // Keep memory_trace; run/scenario for Check log come from active console run.
+        }
         if (doc.scenario_id && !currentRun) {
           const catSel = el("category");
           const presetSel = el("preset");
@@ -2742,7 +2761,15 @@
         }
         if (statusEl) {
           const sync = doc.run_id ? ` · run ${String(doc.run_id).slice(0, 8)}` : "";
-          statusEl.textContent = `Loaded ${entries.length} entries${sync} · ${doc.uploaded_at || latest.path}`;
+          if (runMismatch || scenarioMismatch) {
+            const want = currentRun?.short_id || String(consoleRun || "").slice(0, 8);
+            const got = String(uploadRun || "").slice(0, 8);
+            statusEl.textContent =
+              `Cloud file stamped ${got} (${doc.scenario_id || "?"}) — ` +
+              `Check log uses active run ${want}. Re-upload from phone to fix cloud storage.`;
+          } else {
+            statusEl.textContent = `Loaded ${entries.length} entries${sync} · ${doc.uploaded_at || latest.path}`;
+          }
         }
         refreshPlaybookStatus();
       } catch (e) {
@@ -3242,17 +3269,23 @@
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
+    function runIdsMatch(expected, uploaded) {
+      const exp = String(expected || "").trim();
+      const up = String(uploaded || "").trim();
+      if (!exp || !up) return false;
+      if (exp === up) return true;
+      const expShort = exp.split("-")[0];
+      const upShort = up.split("-")[0];
+      return up === expShort || exp === upShort || expShort === upShort;
+    }
+
     function fieldLogRequestBody(raw) {
-      const body = {
-        scenario_id: activeScenarioId(),
-        logJson: raw,
-      };
-      if (currentRun?.run_id) body.run_id = currentRun.run_id;
-      if (lastCloudLogMeta.run_id) body.upload_run_id = lastCloudLogMeta.run_id;
-      if (lastCloudLogMeta.scenario_id) body.upload_scenario_id = lastCloudLogMeta.scenario_id;
-      const phone = selectedPhone();
-      if (phone?.app_id) body.app_id = phone.app_id;
-      return body;
+      return ScenarioFieldLog.buildFieldLogRequestBody(raw, {
+        activeScenarioId: activeScenarioId(),
+        lastCloudLogMeta,
+        currentRun,
+        appId: selectedPhone()?.app_id || null,
+      });
     }
 
     function openIntentReportPage(data) {

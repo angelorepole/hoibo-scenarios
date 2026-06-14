@@ -381,8 +381,8 @@
       const scenario = await findScenario(String(scenarioId));
       const runMeta = body.run_id ? await loadRunMeta(String(body.run_id)) : null;
       const result = globalThis.ScenarioFieldLog.analyzeFieldLog(scenario, log, runMeta, {
-        uploadScenarioId: body.upload_scenario_id || body.log_scenario_id,
-        uploadRunId: body.upload_run_id || body.log_run_id,
+        uploadScenarioId: body.upload_scenario_id || body.log_scenario_id || scenarioId,
+        uploadRunId: body.upload_run_id || body.log_run_id || body.run_id,
       });
       const playbookSteps = globalThis.ScenarioPlaybook
         ? globalThis.ScenarioPlaybook.evaluatePlaybook(scenario, {
@@ -417,10 +417,21 @@
       const log = body.log ?? body.logJson ?? body.log_json;
       if (log == null) throw new Error("log or logJson required");
       const payload = typeof log === "string" ? { logJson: log } : { log };
-      const scenarioId = body.scenario_id || body.preset_id;
-      if (scenarioId) payload.scenario_id = String(scenarioId);
-      const runId = body.run_id || body.upload_run_id;
-      if (runId) payload.run_id = String(runId);
+      const consoleScenarioId =
+        body.scenario_id || body.preset_id || body.console_scenario_id;
+      if (consoleScenarioId) payload.scenario_id = String(consoleScenarioId);
+      if (body.upload_scenario_id) {
+        payload.upload_scenario_id = String(body.upload_scenario_id);
+      }
+      if (body.upload_run_id) payload.upload_run_id = String(body.upload_run_id);
+      // Active console run only — never fall back to cloud file stamp.
+      const consoleRunId = body.console_run_id || body.run_id;
+      if (consoleRunId) payload.console_run_id = String(consoleRunId);
+      if (body.log_uploaded_at) payload.log_uploaded_at = String(body.log_uploaded_at);
+      if (body.console_run_started_at) {
+        payload.console_run_started_at = String(body.console_run_started_at);
+      }
+      if (body.memory_trace) payload.memory_trace = body.memory_trace;
       return supabaseFn("report-field-log", payload);
     }
     if (path === "/api/scenarios/playbook-status" && method === "POST") {

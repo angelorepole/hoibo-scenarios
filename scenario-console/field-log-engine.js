@@ -1021,7 +1021,7 @@
             "learnedPlaceKind": [
               "home",
               "work",
-              "regular_activity"
+              "work"
             ],
             "minLearnedPlaceRetention": 1
           },

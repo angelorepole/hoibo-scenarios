@@ -165,6 +165,51 @@ Be concise. Plain English.`;
     return up === expShort || exp === upShort || expShort === upShort;
   }
 
+  function parseLogUploadMeta(raw) {
+    try {
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+      return {
+        scenario_id: data.scenario_id || null,
+        run_id: data.run_id || null,
+        uploaded_at: data.uploaded_at || null,
+        memory_trace: data.memory_trace || null,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /**
+   * Build analyze-log / report-log POST body.
+   * File stamp (upload_*) must stay separate from active console run (console_run_*).
+   */
+  function buildFieldLogRequestBody(raw, context) {
+    const ctx = context || {};
+    const meta = ctx.lastCloudLogMeta || {};
+    const body = {
+      scenario_id: ctx.activeScenarioId,
+      logJson: raw,
+    };
+    const parsed = parseLogUploadMeta(raw);
+    const fileScenario = parsed.scenario_id || meta.scenario_id || null;
+    const fileRun = parsed.run_id || meta.run_id || null;
+    const fileUploadedAt = parsed.uploaded_at || meta.uploaded_at || null;
+    const uploadMemory = parsed.memory_trace || meta.memory_trace || null;
+    if (fileScenario) body.upload_scenario_id = fileScenario;
+    if (fileRun) body.upload_run_id = fileRun;
+    if (fileUploadedAt) body.log_uploaded_at = fileUploadedAt;
+    const run = ctx.currentRun;
+    if (run?.run_id) {
+      body.run_id = run.run_id;
+      body.console_run_id = run.run_id;
+      if (run.started_at) body.console_run_started_at = run.started_at;
+    }
+    if (uploadMemory) body.memory_trace = uploadMemory;
+    if (ctx.appId) body.app_id = ctx.appId;
+    return body;
+  }
+
   function syncChecks(scenarioId, runMeta, uploadScenarioId, uploadRunId) {
     if (!runMeta?.run_id) return [];
     const expectedRun = String(runMeta.run_id).trim();
@@ -184,7 +229,10 @@ Be concise. Plain English.`;
       checks.push({
         id: "run_sync",
         pass: false,
-        detail: `Run id mismatch — console ${expectedShort}, log ${uploadRun.split("-")[0]}`,
+        detail:
+          `Run id mismatch — console expects ${expectedShort}, ` +
+          `cloud upload stamped ${uploadRun.split("-")[0]}. ` +
+          "Re-upload from phone (Run sync card must match console).",
       });
     } else {
       checks.push({
@@ -198,7 +246,9 @@ Be concise. Plain English.`;
       checks.push({
         id: "scenario_sync",
         pass: false,
-        detail: `Scenario mismatch — console ${expectedScenario}, log ${uploadScenario}`,
+        detail:
+          `Scenario mismatch — console expects ${expectedScenario}, ` +
+          `cloud upload stamped ${uploadScenario}. Re-upload from phone.`,
       });
     } else if (uploadScenario) {
       checks.push({
@@ -221,11 +271,16 @@ Be concise. Plain English.`;
     const checks = [];
     let failed = false;
 
+    const effectiveUploadScenario =
+      String(opts.uploadScenarioId || upload.scenario_id || "").trim() || null;
+    const effectiveUploadRun =
+      String(opts.uploadRunId || upload.run_id || "").trim() || null;
+
     for (const sync of syncChecks(
       scenario.id,
       runMeta,
-      opts.uploadScenarioId,
-      opts.uploadRunId,
+      effectiveUploadScenario,
+      effectiveUploadRun,
     )) {
       checks.push(sync);
       if (sync.pass === false) failed = true;
@@ -315,6 +370,9 @@ Be concise. Plain English.`;
   global.ScenarioFieldLog = {
     parseFieldLog,
     parseFieldLogUpload,
+    parseLogUploadMeta,
+    buildFieldLogRequestBody,
+    runIdsMatch,
     analyzeFieldLog,
     buildLlmReviewPrompt,
     evaluateEngineRules,

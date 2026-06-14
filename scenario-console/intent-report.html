@@ -12,6 +12,7 @@
     .top a { color: var(--accent); font-size: 0.85rem; }
     h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
     .meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+    .meta.warn { color: #c9a227; }
     .verdict { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; }
     .pill { font-size: 0.72rem; padding: 0.25rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); }
     .pill.pass { border-color: var(--success); color: var(--success); }
@@ -35,6 +36,7 @@
     <div>
       <h1>Intent report</h1>
       <p class="meta" id="meta">Loading…</p>
+      <p class="meta" id="provenance" hidden></p>
     </div>
     <a href="index.html">← Back to walk</a>
   </div>
@@ -59,6 +61,44 @@
       s.className = "pill " + (status || "inc");
       s.textContent = label + ": " + (status === "pass" ? "OK" : status === "warn" ? "check" : status === "fail" ? "problem" : "n/a");
       return s;
+    }
+
+    function summarySection(summary) {
+      if (!summary) return "";
+      const sec = document.createElement("section");
+      const h = document.createElement("h2");
+      h.textContent = "Summary";
+      sec.appendChild(h);
+      const p = document.createElement("p");
+      p.innerHTML = "<strong>" + (summary.verdictPlain || "") + "</strong>";
+      sec.appendChild(p);
+      const ul = document.createElement("ul");
+      (summary.plain || []).forEach((t) => {
+        const li = document.createElement("li");
+        li.textContent = t;
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+      return sec;
+    }
+
+    function pipelineSection(pipeline) {
+      if (!pipeline || !pipeline.plain?.length) return "";
+      const sec = document.createElement("section");
+      const h = document.createElement("h2");
+      h.textContent = "Pipeline (engineering)";
+      sec.appendChild(h);
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      meta.textContent = pipeline.header || "";
+      sec.appendChild(meta);
+      const pre = document.createElement("pre");
+      pre.style.fontSize = "0.78rem";
+      pre.style.margin = "0";
+      pre.style.whiteSpace = "pre-wrap";
+      pre.textContent = pipeline.plain.join("\n");
+      sec.appendChild(pre);
+      return sec;
     }
 
     function section(title, items) {
@@ -109,11 +149,49 @@
       const report = payload.report || payload;
       const meta = report.meta || {};
       const ctx = report.context || {};
+      const prov = meta.provenance || {};
       const parts = [];
       if (ctx.scenarioId) parts.push("scenario " + ctx.scenarioId);
-      if (ctx.runId) parts.push("run " + ctx.runId);
-      parts.push((meta.entryCount || payload.entryCount || "?") + " engine runs");
+      if (prov.fileRunId) parts.push("run on file " + String(prov.fileRunId).split("-")[0]);
+      else if (ctx.runId) parts.push("run " + String(ctx.runId).split("-")[0]);
+      parts.push((meta.entryCount || payload.entryCount || "?") + " checks");
+      if (prov.filteredToRunWindow) parts.push("scoped to active run");
       document.getElementById("meta").textContent = parts.join(" · ");
+
+      const provEl = document.getElementById("provenance");
+      if (provEl) {
+        const lines = [];
+        if (meta.periodStart && meta.periodEnd) {
+          lines.push("Checks in file span the activity dates shown in Day at a glance.");
+        }
+        if (prov.uploadedAt) {
+          const up = new Date(prov.uploadedAt);
+          lines.push(
+            "Uploaded " +
+              up.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }),
+          );
+        }
+        if (prov.consoleRunId) {
+          const short = String(prov.consoleRunId).split("-")[0];
+          let runLine = "Active console run " + short;
+          if (prov.consoleRunStartedAt) {
+            const st = new Date(prov.consoleRunStartedAt);
+            runLine +=
+              " (started " +
+              st.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) +
+              ")";
+          }
+          lines.push(runLine);
+        }
+        if (prov.warnings && prov.warnings.length) {
+          lines.push("⚠ " + prov.warnings[0]);
+          provEl.className = "meta warn";
+        } else {
+          provEl.className = "meta";
+        }
+        provEl.textContent = lines.join(" · ");
+        provEl.hidden = lines.length === 0;
+      }
 
       const v = report.verdict || payload.verdict || {};
       const verdictEl = document.getElementById("verdict");
@@ -124,18 +202,93 @@
 
       const root = document.getElementById("content");
       root.innerHTML = "";
-      const ov = section("Overview", report.overview?.plain);
-      if (ov) root.appendChild(ov);
-      const fn = section("Pipeline", report.funnel?.plain);
-      if (fn) root.appendChild(fn);
+      const sum = summarySection(report.summary);
+      if (sum) root.appendChild(sum);
+      const pipe = pipelineSection(report.pipeline);
+      if (pipe) root.appendChild(pipe);
+      const sig = section("Intent signals (measurement)", report.intentSignals?.plain);
+      if (sig) root.appendChild(sig);
       const ch = checkSection(report.checks);
-      if (ch) root.appendChild(ch);
+      if (ch) {
+        ch.querySelector("h2").textContent = "Sanity checks";
+        root.appendChild(ch);
+      }
       const st = storiesSection(report.narratives);
-      if (st) root.appendChild(st);
+      if (st) {
+        st.querySelector("h2").textContent = "Odd moments";
+        root.appendChild(st);
+      }
+      const del = report.delivery || [];
+      if (del.length) {
+        const sec = document.createElement("section");
+        sec.innerHTML = "<h2>Deal alert delivery</h2>";
+        del.forEach((g) => {
+          const p = document.createElement("p");
+          p.className = "story";
+          p.innerHTML = "<strong>" + g.label + " (" + g.count + ")</strong> " + g.plain;
+          sec.appendChild(p);
+          (g.examples || []).forEach((ex) => {
+            const li = document.createElement("div");
+            li.className = "story";
+            li.textContent = "· " + ex;
+            sec.appendChild(li);
+          });
+        });
+        root.appendChild(sec);
+      }
       const an = section("Watch out", report.anomalies);
       if (an) root.appendChild(an);
-      const tl = section("Timeline", (report.timeline || []).map((e) => e.plain));
-      if (tl) root.appendChild(tl);
+      const tlSec = document.createElement("section");
+      tlSec.innerHTML = "<h2>Day at a glance</h2><p class=\"meta\">Times are local (UK).</p>";
+      const tlUl = document.createElement("ul");
+      let lastDay = "";
+      (report.timeline || []).forEach((e) => {
+        const day = e.dayLabel || "";
+        if (day && day !== lastDay) {
+          const dayLi = document.createElement("li");
+          dayLi.style.listStyle = "none";
+          dayLi.style.marginLeft = "-1.1rem";
+          dayLi.style.fontWeight = "600";
+          dayLi.textContent = day;
+          tlUl.appendChild(dayLi);
+          lastDay = day;
+        }
+        const li = document.createElement("li");
+        const time = (e.at || "").includes("T")
+          ? new Date(e.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })
+          : "";
+        li.textContent = (time ? time + "  " : "") + e.plain;
+        tlUl.appendChild(li);
+      });
+      if (tlUl.children.length) {
+        tlSec.appendChild(tlUl);
+        root.appendChild(tlSec);
+      }
+      const placesSec = document.createElement("section");
+      placesSec.innerHTML = "<h2>Places on this phone</h2>";
+      const places = report.learnedPlaces || [];
+      if (places.length) {
+        const ul = document.createElement("ul");
+        places.forEach((p) => {
+          const li = document.createElement("li");
+          li.textContent =
+            p.label +
+            " · " +
+            p.lat.toFixed(5) +
+            ", " +
+            p.lng.toFixed(5) +
+            " · last confirmed " +
+            p.lastConfirmed;
+          ul.appendChild(li);
+        });
+        placesSec.appendChild(ul);
+      } else {
+        const p = document.createElement("p");
+        p.className = "meta";
+        p.textContent = "None saved on device yet — engine needs repeated visits at the same area.";
+        placesSec.appendChild(p);
+      }
+      root.appendChild(placesSec);
       const hi = section("What to try next", report.hints);
       if (hi) root.appendChild(hi);
 
