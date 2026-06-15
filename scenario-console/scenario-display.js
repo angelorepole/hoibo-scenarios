@@ -211,6 +211,20 @@
     return applyHumanCopy(scenario);
   }
 
+  function formatPlaybookStepHtml(doText) {
+    const raw = String(doText || "").trim();
+    if (!raw) return "";
+    if (!raw.includes("\n")) return escapeHtml(raw);
+    const lines = raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length <= 1) return escapeHtml(raw);
+    return `<ul class="step-do-list">${lines
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("")}</ul>`;
+  }
+
   global.ScenarioDisplay = {
     applyHumanCopy,
     scenarioForDisplay,
@@ -219,6 +233,7 @@
     stepSection,
     groupPlaybookBySection,
     playbookExpectsRedeem,
+    formatPlaybookStepHtml,
     SECTION_LABELS,
     filterPlaybookForHosted,
     formatOfferDeal,

@@ -204,6 +204,12 @@ input, select, textarea {
   width: 100%;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+}
+
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);

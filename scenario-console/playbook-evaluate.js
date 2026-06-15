@@ -127,7 +127,7 @@
       if (verify === "run_seeded") {
         const ok = Boolean(runMeta && shops.length);
         row.status = ok ? "pass" : "pending";
-        row.detail = ok ? "" : "Waiting for Mac to run scenario";
+        row.detail = ok ? "" : "Not started — use Walk centre & Phones below";
         return row;
       }
 
@@ -164,7 +164,7 @@
 
       if (!shops.length) {
         row.status = "pending";
-        row.detail = "Tap Run scenario first";
+        row.detail = "";
         return row;
       }
 

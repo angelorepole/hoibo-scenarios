@@ -33,7 +33,7 @@
   <meta name="Diffbot" content="noindex, nofollow">
   <meta name="Omgilibot" content="noindex, nofollow">
   <meta name="YouBot" content="noindex, nofollow">
-  <meta name="walk-build" content="20260614192420" />
+  <meta name="walk-build" content="20260615124142" />
   <title>Scenarios — Hoibò Dev Console</title>
   <link rel="icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/hoibo-scenarios-pages/assets/icons/Hoibo_pin.svg" />
@@ -492,6 +492,11 @@
       margin-bottom: 0.35rem;
     }
 
+    .playbook-setup-intro {
+      margin: 0 0 0.5rem;
+      font-size: 0.8rem;
+    }
+
     .playbook-section-setup .playbook-section-head {
       color: #60a5fa;
     }
@@ -513,6 +518,26 @@
     .playbook li {
       margin-bottom: 0.45rem;
       line-height: 1.4;
+    }
+
+    .playbook .step-body {
+      display: inline;
+    }
+
+    .playbook .step-do-list {
+      margin: 0.25rem 0 0;
+      padding-left: 1.1rem;
+      list-style: disc;
+    }
+
+    .playbook .step-do-list li {
+      margin-bottom: 0.2rem;
+      line-height: 1.35;
+      font-size: 0.82rem;
+    }
+
+    .playbook .step-do-list li:last-child {
+      margin-bottom: 0;
     }
 
     .playbook .who {
@@ -892,6 +917,10 @@
     .admin-key-remember input {
       margin-top: 0.2rem;
       flex-shrink: 0;
+      width: auto;
+    }
+    .admin-key-remember span {
+      min-width: 0;
     }
     .modal-footer {
       padding: 1rem 1.25rem;
@@ -2477,6 +2506,12 @@
           head.className = "playbook-section-head";
           head.textContent = group.label;
           block.appendChild(head);
+          if (group.id === "setup" && canControlRuns() && !currentRun) {
+            const intro = document.createElement("p");
+            intro.className = "hint playbook-setup-intro";
+            intro.textContent = "On this Mac — use Walk centre and Phones below.";
+            block.appendChild(intro);
+          }
         }
         const ol = document.createElement("ol");
         group.steps.forEach((s) => {
@@ -2486,9 +2521,15 @@
           const mark = stepMark(status);
           const detail =
             prog?.detail && status !== "pass" && s.verify !== "manual"
-              ? `<span class="step-detail">${prog.detail}</span>`
+              ? `<span class="step-detail">${escapeHtml(prog.detail)}</span>`
               : "";
-          li.innerHTML = `${mark}<span class="who">${s.who || "Step"}</span> — ${s.do}${detail}`;
+          const doHtml = window.ScenarioDisplay?.formatPlaybookStepHtml
+            ? ScenarioDisplay.formatPlaybookStepHtml(s.do)
+            : escapeHtml(s.do || "");
+          const doBlock = doHtml.includes("step-do-list")
+            ? `<span class="step-body"><span class="who">${escapeHtml(s.who || "Step")}</span>${doHtml}${detail}</span>`
+            : `<span class="step-body"><span class="who">${escapeHtml(s.who || "Step")}</span> — ${doHtml}${detail}</span>`;
+          li.innerHTML = `${mark}${doBlock}`;
           if (status === "manual") {
             li.classList.add("playbook-tap-done");
             li.title = "Tap when you have done this step";
@@ -2505,19 +2546,40 @@
       updatePlaybookHeading();
     }
 
+    function summaryAddsInfo(purpose, summary) {
+      const p = String(purpose || "").trim().toLowerCase();
+      const s = String(summary || "").trim().toLowerCase();
+      if (!s) return false;
+      if (!p) return true;
+      if (p === s) return false;
+      if (p.includes(s) || s.includes(p)) return false;
+      return true;
+    }
+
+    function acceptanceIdsNotInLabel(p) {
+      const label = String(p?.label || "");
+      return (p?.acceptanceIds || []).filter((id) => id && !label.includes(id));
+    }
+
     function renderScenarioBlurb(p) {
       const purposeEl = el("preset-purpose");
       const descEl = el("preset-desc");
       const traceEl = el("preset-trace");
+      const purpose = (p.purpose || "").trim();
+      const summary = (p.summary || "").trim();
       if (purposeEl) {
-        purposeEl.textContent = p.purpose || "";
-        purposeEl.hidden = !p.purpose;
+        purposeEl.textContent = purpose;
+        purposeEl.hidden = !purpose;
       }
-      if (descEl) descEl.textContent = p.summary || "";
-      const ids = (p.acceptanceIds || []).filter(Boolean).join(", ");
+      if (descEl) {
+        const showSummary = summaryAddsInfo(purpose, summary);
+        descEl.textContent = showSummary ? summary : "";
+        descEl.hidden = !showSummary;
+      }
+      const extraIds = acceptanceIdsNotInLabel(p);
       if (traceEl) {
-        traceEl.textContent = ids ? `Test ID: ${ids}` : "";
-        traceEl.hidden = !ids;
+        traceEl.textContent = extraIds.length ? `Test ID: ${extraIds.join(", ")}` : "";
+        traceEl.hidden = !extraIds.length;
       }
     }
 
@@ -2922,9 +2984,11 @@
         const p = scenarioList.find((x) => x.id === presetSel.value);
         if (!p) return;
         renderScenarioBlurb(p);
-        el("preset-seed").textContent = p.seedLine
-          ? `On map after Run: ${p.seedLine}`
-          : "";
+        const seedEl = el("preset-seed");
+        if (seedEl) {
+          seedEl.textContent = "";
+          seedEl.hidden = true;
+        }
         if (!currentRun) applyScenarioRadius(p);
         renderPlaybook(p.playbook || [], p.passCriteria || p.fieldLogExpect || [], p.multiDay);
         if (!currentRun) {
